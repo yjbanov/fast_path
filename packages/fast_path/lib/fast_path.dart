@@ -3,7 +3,11 @@
 ///
 /// The library lives entirely on the Dart heap — there are no native
 /// bindings to manage and no manual memory management to perform.
+///
+/// Path construction is split across two classes: [PathBuilder] (mutable,
+/// write-optimized) and [Path] (immutable, query-optimized). See the
+/// package README for the rationale.
 library;
 
-// Public API will be exported from here as it is implemented.
-// export 'src/path.dart';
+export 'src/geometry.dart';
+export 'src/path.dart';

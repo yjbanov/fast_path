@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter (provides Dart and is required by conformance/bridge packages)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Resolve workspace dependencies
+        run: dart pub get
+
+      - name: Analyze
+        run: dart analyze
+
+      - name: Test fast_path
+        working-directory: packages/fast_path
+        run: dart test
+
+      # TODO(M0+): once fast_path_conformance and fast_path_flutter contain
+      # tests, add `flutter test` steps for each.
