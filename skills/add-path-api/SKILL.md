@@ -1,36 +1,53 @@
 ---
 name: add-path-api
-description: Use whenever a method, getter, setter, constructor, or related type is being added to or changed on fast_path's Path API surface, or when an existing fast_path API is being brought closer to Flutter's dart:ui Path. Trigger on phrases like "add Path.arcTo", "implement contains", "match Flutter's behavior for X", "this should mirror dart:ui", "expose Y on Path", and on PRs that touch lib/src/path.dart, lib/fast_path.dart's exports, or anything in the Path public surface. Apply this even when the user only says "add X to Path" without naming dart:ui — Path parity is the project's defining constraint and this skill enforces it.
+description: Use whenever a method, getter, setter, constructor, or related type is being added to or changed on fast_path's PathBuilder or Path API surface, or when existing fast_path behavior is being brought closer to Flutter's dart:ui Path. Trigger on phrases like "add arcTo", "implement contains", "match Flutter's behavior for X", "this should mirror dart:ui", "expose Y on Path", "add a builder method", and on PRs that touch lib/src/path.dart, lib/src/path_builder.dart, lib/fast_path.dart's exports, or anything in the Path/PathBuilder public surface. Apply this even when the user only says "add X to Path" without naming dart:ui — behavioral parity with dart:ui.Path is the project's defining constraint and this skill enforces it across the builder/path split.
 ---
 
-# Adding or extending the Path API surface
+# Adding or extending the PathBuilder / Path API surface
 
-`fast_path`'s Path is meaningful only insofar as it behaves like
-`dart:ui.Path`. Every public method, getter, and constructor we add is a
-parity claim. This skill is the checklist for making that claim safely:
-matching shape, matching behavior, allocation-clean, no native bindings, and
-covered by tests that prove the parity claim instead of just hoping for it.
+`fast_path` splits `dart:ui.Path` into two classes (see DESIGN.md §4.1):
+
+- **`PathBuilder`** — mutable, write-optimized. All construction primitives
+  (`moveTo`, `lineTo`, `cubicTo`, `addRect`, …) live here.
+- **`Path`** — immutable, query-optimized. All observers (`contains`,
+  `getBounds`, `computeMetrics`, …) live here. Pure transforms
+  (`transform`, `shift`) and `Path.combine` return new `Path` instances.
+
+The behavior of each operation must match `dart:ui.Path`. The *shape* —
+which class hosts the method — is the deliberate divergence. Every public
+method, getter, and constructor we add is a behavioral parity claim. This
+skill is the checklist for making that claim safely: pick the right class,
+match the operation's behavior, stay allocation-clean, no native bindings,
+and ship tests that prove the parity claim instead of hoping for it.
 
 ## Why this matters
 
-Users come to `fast_path` because they already know `dart:ui.Path`. A method
-that takes the wrong argument order, returns a slightly different empty
-bounds, or rounds differently on a degenerate cubic is worse than not having
-the method at all — it's a quiet trap. The whole value proposition collapses
-the moment we say "almost like Flutter's Path."
+Users come to `fast_path` because they already know `dart:ui.Path`. A
+method that returns a slightly different empty bounds, or rounds
+differently on a degenerate cubic, or treats NaN inputs differently, is
+worse than not having the method at all — it's a quiet trap. The whole
+value proposition collapses the moment we say "almost like Flutter's Path."
 
-At the same time, the project's other half is *speed*: pure-Dart, no FFI, no
-GC churn. New API has to honor both invariants on day one. They're cheap to
-hit when the method is fresh and expensive to retrofit later.
+The split itself is the second invariant. Mutation on `Path` is a category
+error: the type is sealed and immutable for good reasons (lazy caches with
+no invalidation, cross-isolate sharing, hashable for memoization — see
+DESIGN.md §5.3). A query method that lives on `PathBuilder` is a similar
+mistake — it forces the builder to track caches and bump generation IDs,
+which is exactly what we split it apart to avoid.
+
+At the same time, the project's other half is *speed*: pure-Dart, no FFI,
+no GC churn. New API has to honor both invariants on day one. They're
+cheap to hit when the method is fresh and expensive to retrofit later.
 
 ## When this skill applies
 
 Apply this skill when:
 
-- Adding a new public method, getter, setter, or constructor to `Path`.
-- Adding a public class that participates in the Path API (e.g.
-  `PathMetric`, `Tangent`).
-- Changing an existing fast_path Path method's signature, behavior, or
+- Adding a new public method, getter, setter, or constructor to
+  `PathBuilder` or `Path`.
+- Adding a public class that participates in the API (e.g. `PathMetric`,
+  `Tangent`).
+- Changing an existing fast_path method's signature, behavior, or
   documented contract.
 - Reviewing a PR that does any of the above.
 
@@ -55,94 +72,141 @@ If `dart:ui.Path` has no equivalent and you're proposing a brand-new method:
 matching what's already there. The default answer for "should we extend
 beyond dart:ui?" is "not in 1.0".
 
-### 2. Match the signature exactly
+### 2. Pick the right class — PathBuilder or Path
 
-Use the same parameter names, the same parameter order, and the same
-defaults. Dart 3 records and named arguments mean callers will write
-`p.arcToPoint(arcEnd: ..., radius: ...)`; differing names break that.
+Use the dart:ui method's *role* to decide where it lands in fast_path:
+
+| dart:ui.Path method shape | fast_path home |
+| --- | --- |
+| Mutates the path (`moveTo`, `lineTo`, `cubicTo`, `addRect`, `close`, `reset`, `fillType=` setter) | `PathBuilder` |
+| Observes the path (`contains`, `getBounds`, `computeMetrics`, `fillType` getter) | `Path` |
+| Returns a new path from existing ones (`Path.combine`, transformations) | `Path` (static or instance, returns new `Path`) |
+| Constructs (`Path()`, `Path.from(other)`) | Mostly `PathBuilder()` / `PathBuilder.from(Path)`. `Path` itself is constructed via `PathBuilder.build()`. |
+
+If a method is genuinely both — e.g. dart:ui's `Path.shift` returns a new
+path but conceptually mutates a copy — we host it on `Path` because it
+returns a new immutable result. Pure functions belong with the immutable
+side.
+
+When the right home is unclear, ask. Putting a query on `PathBuilder` or a
+mutator on `Path` undermines the split's whole point (DESIGN.md §4.1).
+
+### 3. Match the signature exactly
+
+Use the same parameter names, parameter order, and defaults as dart:ui's
+equivalent. Dart 3 records and named arguments mean callers will write
+`builder.arcToPoint(arcEnd: ..., radius: ...)`; differing names break that.
 
 If `dart:ui.Path` takes `Float64List matrix4`, take `Float64List matrix4`.
 Don't "improve" it to `Matrix4` — users who already work with engine code
 expect the engine shape.
 
-If a fast_path-specific helper genuinely improves DX, expose it as an
-**extension method** in a separate library, not as a method on `Path`.
+The one shape divergence is the receiver: `dart:ui.Path.lineTo(...)`
+becomes `PathBuilder.lineTo(...)` on our side. Document that explicitly
+in the dartdoc (see step 6) so users porting code know what to substitute.
 
-### 3. Honor the engine's edge-case behavior
+If a fast_path-specific helper genuinely improves DX, expose it as an
+**extension method** in a separate library, not as a method on
+`PathBuilder` or `Path`.
+
+### 4. Honor the engine's edge-case behavior
 
 `dart:ui.Path` has a number of "documented but quiet" behaviors. These are
-parity bugs in waiting. Common ones to think about:
+parity bugs in waiting. The split doesn't change which behaviors must
+match; it only changes which class hosts the matching code (mutation
+edge-cases land on `PathBuilder`, query edge-cases land on `Path`).
+Common ones:
 
-- Empty path: `getBounds()` returns `Rect.zero`, not "throws".
-- NaN / infinite inputs: `dart:ui.Path` typically silently ignores or
-  clamps. Match that. Document it.
-- `close()` on an already-closed contour: idempotent, not an error.
-- `relative*` methods on a path with no current point: documented as starting
-  from `Offset.zero`. Implement that, not "throw".
-- `addPath` / `extendWithPath`: parameter order, matrix application, and
-  whether the segment is connected matter.
+- Empty path: `Path.getBounds()` returns `Rect.zero`, not "throws".
+- NaN / infinite inputs to builder methods: `dart:ui.Path` typically
+  silently ignores or clamps. Match that on `PathBuilder`. Document it.
+- `PathBuilder.close()` on an already-closed contour: idempotent, not an
+  error.
+- `PathBuilder.relative*` on a builder with no current point: dart:ui
+  documents starting from `Offset.zero`. Implement that, not "throw".
+- `PathBuilder.addPath` / `extendWithPath`: parameter order, matrix
+  application, and whether the segment is connected all matter.
+- `Path.contains` on a degenerate (zero-length, single-point) path:
+  match dart:ui's behavior, which is typically "not contained".
 
 When in doubt, write a tiny Flutter test program, observe the actual
 behavior, and pin it down in a parity test before implementing.
 
-### 4. Implement on the verb/point buffer (no native bindings)
+### 5. Implement on the verb/point buffer (no native bindings)
 
 Implementation rules, in priority order:
 
 1. **No `dart:ffi`, no `dart:io`, no `dart:ui` imports in `lib/`.** This is
    non-negotiable — the package has to run on plain Dart VMs.
-2. **Mutate the verb and point buffers directly.** Most builder methods
-   (`lineTo`, `cubicTo`, `addRect`) are 5-10 lines: append a verb byte, write
-   the points into `_points`, update `_lastMoveToIndex`, bump `_genId`.
-3. **No allocations in the hot path.** A `lineTo` should not allocate an
-   `Offset` or a `List`. Take `(double, double)` internally; the public API
-   wraps that.
-4. **Invalidate cached state.** Bump `_genId`. Clear `_cachedBounds`. Reset
-   `_isConvex` to `unknown`. Iterators outliving the mutation should detect
-   the bump and throw, matching `dart:ui` behavior.
-5. **Reuse buffers across calls.** If the algorithm needs scratch space
-   (e.g. flattening), allocate it once on `Path` and reuse, or pass it down
-   as a function argument from the caller.
-6. **Prefer `switch` over the verb enum** to virtual dispatch. The JIT and
-   AOT both produce tight code for switches on small `int` ranges.
+2. **Builder methods append to the verb/point buffers directly.** Most
+   are 5-10 lines: append a verb byte to `_verbs`, write points into
+   `_points`, update `_lastMoveToIndex`. No cache invalidation work —
+   the builder doesn't carry caches (DESIGN.md §5.2).
+3. **Path methods read the verb/point buffers, never write.** `Path`'s
+   buffers are sealed by `build()`; treat them as `final` even though
+   Dart can't enforce that on `Float32List` elements. If you find
+   yourself wanting to mutate a `Path`, you actually want a
+   `PathBuilder.from(path)` somewhere upstream.
+4. **No allocations in the hot path.** A `PathBuilder.lineTo` should not
+   allocate an `Offset` or a `List`. Take `(double, double)` internally;
+   the public API wraps that. A `Path.contains` query likewise should
+   not allocate per call.
+5. **Cache derived data on `Path` lazily.** First `getBounds()` computes
+   and stores; subsequent calls return the cached value. No `_genId`,
+   no invalidation guard — the path is immutable, so the cache is
+   trivially correct forever.
+6. **Reuse scratch buffers across calls.** If an algorithm needs scratch
+   space (curve flattening, intersection), keep it as a private field
+   on `Path` (computed once, reused) or pass it as a function argument
+   from the caller. Don't `Float32List(n)` per call.
+7. **Prefer `switch` over the verb enum** to virtual dispatch. The JIT
+   and AOT both produce tight code for switches on small `int` ranges.
 
 If the algorithm is non-trivial (curve flattening, contains, combine), this
 is also a port from Skia — use the `port-from-skia` skill in tandem.
 
-### 5. Write the dartdoc
+### 6. Write the dartdoc
 
 Public members get a doc comment. The comment should:
 
 - Summarize what the method does in one sentence.
-- Cross-reference the `dart:ui.Path` equivalent so users know they can rely
-  on parity. Phrase it like: "Behaves identically to [`Path.arcTo`] in
-  `dart:ui` (modulo the floating-point tolerances documented in the
-  package README)."
-- Spell out any edge case the engine has — empty path, NaN, ignored verbs.
-  These are the parity claims; if they're documented, they're testable.
-- Not promise behaviors we haven't tested. If we haven't run a parity test
-  yet, the doc says "intended to mirror" rather than "mirrors".
+- Name the dart:ui equivalent and cross-reference it. Phrase it like:
+  "Behaves identically to [`Path.arcTo`] in `dart:ui`, except that this
+  method lives on [PathBuilder] rather than `Path` (see the package README
+  on the Builder/Path split)." This is the one place users porting code
+  will look to find out what changed.
+- Spell out any edge case the engine has — empty path, NaN, ignored
+  verbs. These are the parity claims; if they're documented, they're
+  testable.
+- Not promise behaviors we haven't tested. If we haven't run a parity
+  test yet, the doc says "intended to mirror" rather than "mirrors".
 
-### 6. Tests: unit + parity
+### 7. Tests: unit + parity
 
 Two test files, both required for the PR:
 
 **Unit test** (`test/path_<area>_test.dart`):
 
-- Construct the path, call the new method, assert observable state.
-- Cover the documented edge cases: empty path, NaN, redundant calls, large
-  inputs.
+- Build a path with `PathBuilder`, call `build()`, then call the new
+  method (on the builder pre-build, or on the path post-build, depending
+  which class hosts it). Assert observable state.
+- Cover the documented edge cases: empty path, NaN, redundant calls,
+  large inputs.
 - These run under `dart test` with no Flutter dependency.
 
 **Parity test** (`test/parity/path_<area>_parity_test.dart`):
 
-- Imports `dart:ui` (this directory is the only place in the repo that may).
-- For each test case: build the same input on `fast_path.Path` and on
-  `ui.Path`, then compare observable outputs (`getBounds`, `contains` over
-  a sample grid, `computeMetrics().length`, etc.).
-- Tolerances are documented at the top of the file. `getBounds` agreement
-  to 1e-4 absolute / 1e-6 relative; `contains` exact except in an
-  epsilon-band around the curve; lengths to 1e-4.
+- Imports `dart:ui` (this directory is the only place in the repo that
+  may).
+- For each test case: replay the *same call sequence* on a
+  `fast_path.PathBuilder` and on a `ui.Path`. Then compare observable
+  outputs of the resulting `fast_path.Path` (after `build()`) against
+  the `ui.Path` (which conflates builder and path):
+  `getBounds`, `contains` over a sample grid, `computeMetrics().length`,
+  etc.
+- Tolerances are documented at the top of the file. `getBounds`
+  agreement to 1e-4 absolute / 1e-6 relative; `contains` exact except
+  in an epsilon-band around the curve; lengths to 1e-4.
 - Runs only under `flutter test` (the file should be guarded so a plain
   `dart test` ignores it cleanly — typically by living under
   `test/parity/` and being excluded by `dart_test.yaml`).
@@ -150,32 +214,44 @@ Two test files, both required for the PR:
 A change is not done until the parity test for the affected behavior is
 green.
 
-### 7. Update the index
+### 8. Update the index
 
-Add the new symbol to `lib/fast_path.dart`'s exports if it's a new top-level
-type. Add an entry to `CHANGELOG.md` under the unreleased section. If the
-change touches the architecture, update `DESIGN.md`.
+Add new top-level types to `lib/fast_path.dart`'s exports. Add an entry to
+`CHANGELOG.md` under the unreleased section. If the change touches the
+architecture (e.g. moves a method from `PathBuilder` to `Path` or vice
+versa), update `DESIGN.md`.
 
-### 8. Benchmark anything in the hot path
+### 9. Benchmark anything in the hot path
 
-If the new method is plausibly called in a tight loop (`lineTo`, `cubicTo`,
-`contains`, builder methods on every frame), add a benchmark under
-`benchmark/` that compares against `dart:ui.Path` for the same workload. The
-benchmark doesn't have to win on day one; it has to exist, so we notice
-regressions later.
+If the new method is plausibly called in a tight loop (builder methods
+called every frame, `Path.contains` called per pointer event, `getBounds`
+called per layout pass), add a benchmark under `benchmark/` that compares
+the equivalent dart:ui call sequence. The benchmark doesn't have to win
+on day one; it has to exist, so we notice regressions later.
 
 ## Quick checklist (use before opening a PR)
 
-- [ ] `dart:ui.Path` has the same signature — name, parameter order, defaults.
+- [ ] Method lives on the right class — `PathBuilder` for mutation,
+      `Path` for queries and pure transforms.
+- [ ] `dart:ui.Path`'s equivalent has the same signature — parameter
+      names, order, defaults — modulo the receiver class.
 - [ ] Parameter types match dart:ui (e.g. `Float64List` not `Matrix4`).
-- [ ] Documented edge cases (empty path, NaN, redundant calls) are matched.
+- [ ] Documented edge cases (empty path, NaN, redundant calls) are
+      matched.
 - [ ] No `dart:ffi`, `dart:io`, or `dart:ui` import in `lib/`.
-- [ ] No allocations in the hot path; verb/point buffers are mutated in place.
-- [ ] `_genId` bumped, `_cachedBounds` cleared, `_isConvex` reset on mutation.
-- [ ] Dartdoc cross-references the dart:ui equivalent and lists edge cases.
+- [ ] No allocations in the hot path. Builder methods append in place;
+      query methods read in place.
+- [ ] If new state was added to `Path`: it's `final`, populated only by
+      `PathBuilder.build()` or by another `Path` method that returns a
+      new `Path`.
+- [ ] If a query needs caching: lazy field on `Path`, no `_genId`, no
+      invalidation guard.
+- [ ] Dartdoc cross-references the dart:ui equivalent, calls out the
+      receiver-class change, and lists edge cases.
 - [ ] Unit test covers documented edges.
-- [ ] Parity test under `test/parity/` covers the dart:ui-equivalent
-      behavior and is green under `flutter test`.
+- [ ] Parity test under `test/parity/` replays the same call sequence
+      on `PathBuilder` + `Path` and on `ui.Path`, and is green under
+      `flutter test`.
 - [ ] `CHANGELOG.md` updated; `DESIGN.md` updated if architecture moved.
 - [ ] If on the hot path: benchmark added under `benchmark/`.
 
@@ -186,4 +262,6 @@ regressions later.
   need to pick a behavior.
 - A case where matching dart:ui would force `fast_path` to allocate or use
   an algorithm that doesn't fit the verb/point buffer representation.
+- A method that genuinely seems like it should mutate a `Path` rather
+  than return a new one. The split is load-bearing; ask before bending it.
 - Any change that would require importing `dart:ui` from `lib/`.

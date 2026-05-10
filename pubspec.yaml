@@ -1,15 +1,10 @@
-name: fast_path
-description: >-
-  A pure-Dart implementation of a 2D path API with feature parity to Flutter's
-  Path. Avoids native bindings so geometry work stays on the Dart heap and
-  benefits from the Dart garbage collector.
-version: 0.1.0
-repository: https://github.com/yjbanov/fast_path
-issue_tracker: https://github.com/yjbanov/fast_path/issues
+name: fast_path_workspace
+publish_to: none
 
 environment:
-  sdk: ^3.4.0
+  sdk: ^3.5.0
 
-dev_dependencies:
-  lints: ^4.0.0
-  test: ^1.25.0
+workspace:
+  - packages/fast_path
+  - packages/fast_path_conformance
+  - packages/fast_path_flutter

@@ -1,0 +1,21 @@
+name: fast_path_conformance
+description: >-
+  Conformance tests verifying that fast_path matches dart:ui Path behavior.
+  Not published to pub.dev.
+publish_to: none
+
+resolution: workspace
+
+environment:
+  sdk: ^3.5.0
+  flutter: ">=3.24.0"
+
+dependencies:
+  fast_path: any
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^4.0.0

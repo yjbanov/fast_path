@@ -30,8 +30,17 @@ backing. A pure-Dart implementation is feasible and removes a class of cost.
 
 ## 2. Goals
 
-- **Feature parity** with `dart:ui`'s `Path` class: every public method, every
-  documented behavior, every edge case Flutter's tests pin down.
+- **Behavioral parity** with `dart:ui`'s `Path` for every operation it
+  exposes — same edge cases, same NaN/empty-path treatment, same tolerances
+  — even though the *construction shape* differs (see "Builder/Path split"
+  below). When you build the same path through both libraries and ask the
+  same query, you get the same answer.
+- **Builder/Path split.** Construction lives on a separate, mutable
+  `PathBuilder`. The resulting `Path` is immutable and optimized for
+  queries. This is a deliberate divergence from `dart:ui.Path` where one
+  object plays both roles. The separation buys a sharper internal model:
+  the builder can be optimized purely for fast appends, and the path can
+  cache derived data eagerly without worrying about invalidation.
 - **Pure Dart**. No FFI. No platform channels. No `dart:ui` import inside the
   library code. Runs on plain Dart VMs (server, CLI, tests) as well as inside
   Flutter apps.
@@ -40,10 +49,6 @@ backing. A pure-Dart implementation is feasible and removes a class of cost.
   in inner loops.
 - **GC-friendly**. The package is plain Dart objects on the Dart heap. No
   finalizers, no manual `dispose`, no native handles.
-- **Behavioral compatibility** with Flutter's Path under reasonable tolerance.
-  We do not need to be bit-identical to Skia, but `Path.contains`,
-  `getBounds`, `combine`, etc. should agree with Flutter's Path on a curated
-  parity test corpus to within a documented epsilon.
 - **License-clean**. BSD-3-Clause, matching Skia and Flutter so we can port
   algorithms upstream.
 
@@ -51,10 +56,15 @@ backing. A pure-Dart implementation is feasible and removes a class of cost.
 
 - **Rendering.** `fast_path` builds and queries paths; it does not rasterize
   them or hand them to a GPU. Rendering remains the engine's job.
-- **A drop-in `dart:ui.Path`.** We do not subclass or implement
+- **API-shape compatibility with `dart:ui.Path`.** Our `Path` is immutable
+  and queries-only; mutating methods like `lineTo` and `cubicTo` live on a
+  separate `PathBuilder`. Code written against `dart:ui.Path` does not
+  drop in. The migration is mechanical (move builder calls onto a
+  `PathBuilder`, then call `.build()`) but it is not zero-touch.
+- **A drop-in `dart:ui.Path` subclass.** We do not subclass or implement
   `dart:ui.Path`. Bridging to Flutter (converting a `fast_path.Path` into a
-  `ui.Path` for painting) is out of scope for the core package and may live in
-  a separate companion later.
+  `ui.Path` for painting) is out of scope for the core package and may live
+  in a separate companion later.
 - **Premature SIMD.** Dart's `Float32x4` is appealing but constrains the
   algorithms. We will reach for it only where benchmarks justify it.
 - **Beating Skia at every operation.** Some operations (boolean ops over
@@ -64,11 +74,52 @@ backing. A pure-Dart implementation is feasible and removes a class of cost.
 
 ## 4. Public API shape
 
-The package exposes one principal class — `Path` — plus the geometry types it
-needs and a couple of helpers. The shape mirrors `dart:ui.Path` so that users
-familiar with Flutter recognize it immediately.
+The package exposes two principal classes — a mutable `PathBuilder` and an
+immutable `Path` — plus the geometry types they need and a couple of
+helpers. Operations match `dart:ui.Path`'s behavior; the *shape* of the API
+diverges deliberately along a build/query seam.
 
-### 4.1 Geometry types (own definitions)
+### 4.1 Builder/Path split
+
+`dart:ui.Path` is one object that you mutate while you build it and then
+query while you continue to mutate it. That conflation forces tradeoffs on
+both sides: a query-time cache like `getBounds()` has to be invalidated on
+every mutation, an active iterator over a `PathMetric` has to detect that
+the underlying path moved, and the build-time append loop pays for caches
+that the builder isn't even using yet.
+
+We split it:
+
+- `PathBuilder` is **mutable** and **write-optimized**. It owns growable
+  verb and point buffers and supports the full set of construction
+  primitives (`moveTo`, `lineTo`, `cubicTo`, `addRect`, …). It does not
+  cache derived data — there's nothing to invalidate, because nothing has
+  asked yet. `PathBuilder.build()` produces a `Path`.
+- `Path` is **immutable** and **query-optimized**. It holds the verb and
+  point buffers handed to it by `build()`, exposes only queries
+  (`contains`, `getBounds`, `computeMetrics`, …), and caches derived data
+  eagerly or lazily without invalidation logic, since it cannot change.
+- `Path.combine(op, a, b)`, `Path.transform(matrix)`, and `Path.shift(o)`
+  return *new* `Path` instances. They are pure functions.
+- Editing an existing `Path` means: `PathBuilder.from(path)` to seed a
+  fresh builder from the path's contents, mutate, then `build()` again.
+
+This is the same divergence pattern as Java's `String` / `StringBuilder` or
+Swift's `Data` / inout buffers: one type for the workload of constructing,
+another for the workload of inspecting. It costs us drop-in compatibility
+with `dart:ui.Path` (see §3) and buys us:
+
+- The builder's append loop is straight-line — no cache bookkeeping in the
+  hot path.
+- The path's query cache (bounds, length tables, convexity) computes once
+  per path and is then read-only; no `_genId` checks, no
+  copy-on-mutate, no torn reads.
+- Sharing a `Path` across isolates / threads / async boundaries is safe by
+  construction.
+- Algorithms that take a `Path` (intersection, transform, combine) can
+  trust the buffers won't move underneath them and skip defensive copies.
+
+### 4.2 Geometry types (own definitions)
 
 `fast_path` defines its own value types. This keeps the package free of any
 Flutter dependency and lets it run on plain Dart. Names and field order match
@@ -91,29 +142,54 @@ extension methods to convert between `fast_path` types and `dart:ui` types
 without making the core depend on Flutter. That package is out of scope for
 0.x.
 
-### 4.2 Path methods
+### 4.3 PathBuilder methods
 
-Tracked against `dart:ui.Path`. Initial milestone targets (see §10):
+All construction lives here. Behavior of each method matches the
+identically-named `dart:ui.Path` method. Initial milestone targets (see §10):
 
-- Construction: `Path()`, `Path.from(Path)`, `Path.combine(op, a, b)`.
+- Construction: `PathBuilder()`, `PathBuilder.from(Path)` (seeds from an
+  existing path), `PathBuilder.fromBuilder(PathBuilder)` (clones a builder).
 - Building: `moveTo`, `relativeMoveTo`, `lineTo`, `relativeLineTo`,
   `quadraticBezierTo`, `relativeQuadraticBezierTo`, `cubicTo`,
   `relativeCubicTo`, `conicTo`, `relativeConicTo`, `arcTo`,
-  `arcToPoint`, `relativeArcToPoint`, `addArc`, `addOval`,
-  `addRect`, `addRRect`, `addPolygon`, `addPath`, `extendWithPath`,
-  `close`, `reset`.
-- Queries: `contains(Offset)`, `getBounds()`, `computeMetrics({bool forceClosed})`.
-- Transform / mutate: `transform(Float64List matrix4)`, `shift(Offset)`.
-- Fill rule: `fillType` getter/setter.
+  `arcToPoint`, `relativeArcToPoint`, `addArc`, `addOval`, `addRect`,
+  `addRRect`, `addPolygon`, `addPath`, `extendWithPath`, `close`.
+- State: `fillType` getter/setter, `reset()` (zero the buffers, keep
+  capacity), `reserve(int verbCount, int pointCount)` (capacity hint).
+- Handoff: `Path build()` — produces an immutable `Path`. See §5.4 for the
+  semantics (the default is "snapshot, builder remains usable"; a
+  destructive variant may be added if benchmarks justify it).
+
+### 4.4 Path methods
+
+All queries live here. The class is `final` (no subclassing) and all fields
+are private; the public surface is observation-only.
+
+- Queries: `contains(Offset)`, `getBounds()`,
+  `computeMetrics({bool forceClosed = false})`.
+- Pure transforms (return new `Path`): `transform(Float64List matrix4)`,
+  `shift(Offset)`.
+- Combine (static, returns new `Path`):
+  `Path.combine(PathOperation op, Path a, Path b)`.
+- State: `fillType` getter (read-only).
+- Identity: `==` / `hashCode` based on verb+point buffers + fill type, so
+  built-from-the-same-calls paths compare equal — useful for memoization
+  and tests.
 
 `PathMetric`, `PathMetricIterator`, and `Tangent` follow the same shape as
-`dart:ui`.
+`dart:ui`. Because `Path` is immutable, these iterators do not need the
+"underlying path mutated, throw" guard that `dart:ui` has.
 
 ## 5. Internal representation
 
+The verb + point buffer shape is the same on both classes; what differs is
+the storage discipline (growable on the builder, fixed on the path) and
+what lives alongside the buffers (build-time cursors on the builder, query
+caches on the path).
+
 ### 5.1 Verb + point buffers
 
-A `Path` is, internally, two parallel buffers:
+Both `PathBuilder` and `Path` are, internally, the same two parallel buffers:
 
 - `Uint8List _verbs` — one byte per command from a small enum:
   `move`, `line`, `quad`, `conic`, `cubic`, `close`. (Conics carry a weight;
@@ -133,28 +209,77 @@ Skia and Flutter are 32-bit floats, so f32 keeps us behavior-compatible and
 halves memory traffic. We will revisit if parity tests show f32 rounding
 divergences that matter.
 
-### 5.2 Path metadata
+### 5.2 PathBuilder fields (mutable, write-optimized)
 
-A small struct, kept in fields directly on `Path`:
+The builder optimizes for cheap appends. It does not maintain query caches.
 
-- `_fillType: PathFillType`
-- `_lastMoveToIndex: int` — index into `_points` of the most recent `moveTo`,
-  used to implement `close` correctly without a verb scan.
-- `_isConvex: _Convexity { unknown, convex, concave }` — lazily computed.
-- `_cachedBounds: Rect?` — invalidated on mutation.
-- `_genId: int` — bumps on each mutation; used by `PathMetric` to detect
-  "iterator outlived the path" and throw, matching `dart:ui` behavior.
+- `_verbs`, `_points`, `_conicWeights` — growable. Each has a backing
+  `*List` and a separate `int` cursor, so we can amortize growth without
+  paying for `List.add` style reallocation per element.
+- `_fillType: PathFillType`.
+- `_lastMoveToIndex: int` — index into `_points` of the most recent
+  `moveTo`, used to implement `close` correctly without a verb scan.
+- No `_cachedBounds`, no `_isConvex`, no `_genId`. Queries are not allowed
+  on a builder; if you want a bound, build a `Path` and ask it.
 
-### 5.3 Allocation strategy
+### 5.3 Path fields (immutable, query-optimized)
 
-- Buffers grow geometrically (×2) when full, like a `List`, but live in
-  `Uint8List` / `Float32List` so they are off the GC scan list for primitive
-  contents and tight for inner loops.
-- `Path()` starts with empty buffers; we do not pre-allocate. A `_reserve(n)`
-  hint exists for callers building large paths.
-- `Path.from(other)` does a single block copy of both buffers.
-- `reset()` zeros lengths but keeps capacity, so reusing a `Path` across
-  frames does not thrash the heap.
+The path optimizes for query throughput. It does not allow mutation.
+
+- `_verbs`, `_points`, `_conicWeights` — exact-size, sealed. Backing
+  storage is whatever `build()` handed in (typically a tightly-sized
+  `Uint8List` / `Float32List` view).
+- `_fillType: PathFillType`.
+- `_cachedBounds: Rect?` — lazy on first call; never invalidated.
+- `_isConvex: _Convexity { unknown, convex, concave }` — lazy on first
+  call; never invalidated.
+- `_lengthTable: Float64List?` — built lazily by the first `PathMetric`
+  request and reused across subsequent metric calls.
+- `_hashCode: int?` — lazy. Worth caching because `Path` may be used as a
+  `Map` key (e.g. for memoizing `combine` results).
+
+The "lazy and never invalidated" bit is the structural payoff of the
+split. In `dart:ui.Path` every cache has to think about mutation; here, by
+construction, none of them do.
+
+### 5.4 The `build()` handoff
+
+`PathBuilder.build()` returns a `Path` from the builder's current state.
+The default semantics are **snapshot**: the path receives a tightly-sized
+copy of the builder's buffers, and the builder remains usable for further
+mutation (so callers can keep appending and call `build()` again to get an
+extended snapshot).
+
+The copy is a single `Uint8List.fromList` / `Float32List.fromList` per
+buffer — fast, and importantly, it lets the path use exact-size storage
+rather than the builder's geometric over-allocation. Tightly-sized backing
+storage matters for query throughput (cache lines aren't wasted on slack)
+and for any code that takes `Float32List.length` to mean "valid points".
+
+A second variant, `PathBuilder.takePath()`, is on the table as a future
+optimization: it would *move* the builder's buffers into the path and
+leave the builder empty. This avoids the snapshot copy at the cost of
+invalidating the builder. Defer until benchmarks show the copy is the
+bottleneck. Likely callers: per-frame painters that build one path and
+never reuse the builder.
+
+### 5.5 Allocation strategy
+
+- Builder buffers grow geometrically (×2) when full. They live in
+  `Uint8List` / `Float32List` so primitive contents stay off the GC scan
+  list and inner loops stay tight.
+- `PathBuilder()` starts with empty buffers; we do not pre-allocate.
+  `reserve(verbCount, pointCount)` is exposed for callers that know the
+  size up front.
+- `PathBuilder.from(Path)` is a block copy of the path's exact-size
+  buffers into geometrically-sized builder buffers (capacity rounded up
+  to the next power of two).
+- `PathBuilder.reset()` zeros cursors but keeps capacity, so reusing a
+  builder across frames does not thrash the heap. This is the canonical
+  pattern for hot painters: one builder, reset every frame, build a fresh
+  immutable `Path` each time.
+- `Path` instances allocate their buffers exactly once at construction.
+  There is no `Path.reset()`.
 
 ## 6. Algorithms
 
@@ -188,8 +313,9 @@ parity tests align.
 ### 6.3 `getBounds()`
 
 Tight bounds: for cubics and conics we solve for derivative roots to find
-extrema rather than just hulling control points. Cached on the path; busted
-on mutation via `_genId`.
+extrema rather than just hulling control points. Computed on first call and
+cached on the immutable `Path` indefinitely (no invalidation needed — see
+§5.3).
 
 ### 6.4 `Path.combine(op, a, b)` (boolean ops)
 
@@ -209,8 +335,9 @@ for the common 2D affine case we fast-path with no verb changes.
 
 Per-contour arc length, position along, tangent. Length is integrated via
 adaptive Gauss–Legendre on each segment (cubics) or in closed form (lines,
-circular arcs). Position-along uses a length table built lazily on first
-query and keyed off `_genId`.
+circular arcs). The length table is built lazily on first metric request
+and stored on the immutable `Path`, so subsequent metric queries on the
+same path are O(log n) lookups against a fixed table.
 
 ## 7. Performance
 
@@ -224,10 +351,13 @@ The wins we are chasing, roughly in priority order:
    on egress.
 3. **Tight typed buffers.** `Float32List` and `Uint8List` are friendly to
    Dart's JIT/AOT codegen — array bounds checks hoist, range types are known.
-4. **Cached derived data.** `getBounds()`, length tables, and convexity
-   memoize and invalidate via `_genId`.
-5. **Reusable paths.** `reset()` keeps capacity so callers can avoid GC churn
-   across frames.
+4. **Cached derived data, no invalidation.** Because `Path` is immutable
+   (§5.3), `getBounds()`, length tables, convexity, and `hashCode`
+   memoize once and are read-only thereafter. No version checks in the
+   query hot path.
+5. **Reusable builders.** `PathBuilder.reset()` keeps capacity so per-frame
+   painters can rebuild without GC churn: one builder, reset each frame,
+   `build()` to produce the frame's immutable `Path`.
 
 We deliberately do **not** start with SIMD or isolate-based parallelism.
 They constrain the algorithms; we measure first. SIMD via `Float64x2`
@@ -247,8 +377,10 @@ behavior of silently ignoring).
 ### 8.2 Parity tests against `dart:ui.Path`
 
 Lives in a `test/parity/` directory and only runs under Flutter (`flutter
-test`). For each operation we build the same path with both `fast_path.Path`
-and `ui.Path` and assert agreement:
+test`). For each operation we replay the same call sequence on both sides
+— a `fast_path.PathBuilder` followed by `.build()` on our side, and a
+`ui.Path` (which conflates the two) on the engine side — then compare the
+queries on the resulting paths and assert agreement:
 
 - `getBounds()` to within 1e-4 absolute / 1e-6 relative.
 - `contains()` exact agreement on a grid of sample points except within an
@@ -264,22 +396,28 @@ degeneracies. Failures are minimized with a small shrinker.
 
 `package:test` with property-based helpers. Examples:
 
-- `Path.from(p).getBounds() == p.getBounds()`.
-- `p.transform(I) ≈ p` (within float tolerance).
-- `combine(union, a, a) ≈ a`.
-- `combine(intersect, a, empty) == empty`.
+- `PathBuilder.from(p).build().getBounds() == p.getBounds()` (round-trip).
+- `p.transform(I).getBounds() ≈ p.getBounds()` (identity transform is a
+  no-op within float tolerance).
+- `Path.combine(union, a, a) ≈ a`.
+- `Path.combine(intersect, a, empty) == empty`.
 
 ## 9. Benchmarking
 
-A `benchmark/` directory with `package:benchmark_harness`. Each benchmark has
-two implementations — one using `fast_path.Path`, one using `ui.Path` — and
-the harness reports both in the same row so regressions are obvious.
+A `benchmark/` directory with `package:benchmark_harness`. Each benchmark
+has two implementations — one using `fast_path.PathBuilder` + `Path`, one
+using `ui.Path` — and the harness reports both in the same row so
+regressions are obvious.
 
 Initial benchmark set:
 
-- **Build**: append N `lineTo` / `cubicTo` calls.
-- **Bounds**: `getBounds()` on a 10k-segment path.
-- **Contains**: 1M `contains()` queries on a complex path.
+- **Build**: append N `lineTo` / `cubicTo` calls on `PathBuilder`,
+  including the final `build()` cost.
+- **Build + reset reuse**: per-frame pattern — one builder, `reset()`
+  each iteration, `build()` to a fresh `Path` (mirrors painters).
+- **Bounds**: `Path.getBounds()` on a 10k-segment path. Includes both
+  cold (first call) and warm (cached) timings to expose the lazy cache.
+- **Contains**: 1M `Path.contains()` queries on a complex path.
 - **Metrics**: length and tangent at random `t` values.
 - **Combine**: union / intersect on two organic paths.
 
@@ -292,9 +430,14 @@ ratio-vs-baseline: a >10% regression vs. the previous commit fails the build.
 Rough order of attack. Each milestone is shippable on its own and unblocks
 the next.
 
-1. **M0 — Geometry types and verb buffer.** `Offset`, `Rect`, `RRect`,
-   `Radius`, `PathFillType`, `Path` skeleton with verb/point buffers and
-   `moveTo`/`lineTo`/`close`/`reset`. Bounds + contains for poly-lines.
+1. **M0 — Geometry types, builder/path split, polylines.** `Offset`,
+   `Rect`, `RRect`, `Radius`, `PathFillType`. Both `PathBuilder` and
+   `Path` lands in this milestone, including the `build()` snapshot
+   handoff (§5.4). Builder methods: `moveTo`, `lineTo`, `close`, `reset`,
+   `reserve`, `fillType`. Path methods: `getBounds`, `contains`,
+   `fillType`. Internal verb/point buffer plumbing is shared between the
+   two. The split lands now, not later — retrofitting it after queries
+   are written would be expensive.
 2. **M1 — Curves.** `quadraticBezierTo`, `cubicTo`, `conicTo`, adaptive
    flattening, tight bounds, contains for curves.
 3. **M2 — Convenience builders.** `addRect`, `addOval`, `addRRect`,
