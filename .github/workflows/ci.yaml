@@ -12,10 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Flutter (provides Dart and is required by conformance/bridge packages)
+      # Provides both `flutter` and `dart`. The conformance and bridge
+      # packages need Flutter; the core package would build with plain Dart
+      # alone, but pulling Flutter once keeps the workflow simple.
+      - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
 
       - name: Resolve workspace dependencies
         run: dart pub get
@@ -25,7 +29,8 @@ jobs:
 
       - name: Test fast_path
         working-directory: packages/fast_path
-        run: dart test
+        run: dart test --reporter=expanded
 
-      # TODO(M0+): once fast_path_conformance and fast_path_flutter contain
-      # tests, add `flutter test` steps for each.
+      - name: Conformance tests vs dart:ui
+        working-directory: packages/fast_path_conformance
+        run: flutter test --reporter=expanded
