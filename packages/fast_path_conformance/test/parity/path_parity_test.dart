@@ -21,7 +21,10 @@ typedef PathProgram = void Function(PathTarget target);
 /// surface — extend as new milestones land.
 abstract class PathTarget {
   void moveTo(double x, double y);
+  void relativeMoveTo(double dx, double dy);
   void lineTo(double x, double y);
+  void relativeLineTo(double dx, double dy);
+  void addPolygon(List<(double, double)> points, bool close);
   void close();
   set evenOdd(bool value);
 }
@@ -34,7 +37,20 @@ class _FpTarget implements PathTarget {
   void moveTo(double x, double y) => _b.moveTo(x, y);
 
   @override
+  void relativeMoveTo(double dx, double dy) => _b.relativeMoveTo(dx, dy);
+
+  @override
   void lineTo(double x, double y) => _b.lineTo(x, y);
+
+  @override
+  void relativeLineTo(double dx, double dy) => _b.relativeLineTo(dx, dy);
+
+  @override
+  void addPolygon(List<(double, double)> points, bool close) =>
+      _b.addPolygon(
+        points.map((p) => fp.Offset(p.$1, p.$2)).toList(growable: false),
+        close,
+      );
 
   @override
   void close() => _b.close();
@@ -52,7 +68,20 @@ class _UiTarget implements PathTarget {
   void moveTo(double x, double y) => _p.moveTo(x, y);
 
   @override
+  void relativeMoveTo(double dx, double dy) => _p.relativeMoveTo(dx, dy);
+
+  @override
   void lineTo(double x, double y) => _p.lineTo(x, y);
+
+  @override
+  void relativeLineTo(double dx, double dy) => _p.relativeLineTo(dx, dy);
+
+  @override
+  void addPolygon(List<(double, double)> points, bool close) =>
+      _p.addPolygon(
+        points.map((p) => ui.Offset(p.$1, p.$2)).toList(growable: false),
+        close,
+      );
 
   @override
   void close() => _p.close();
@@ -328,6 +357,113 @@ final List<_Case> _cases = <_Case>[
     const [
       fp.Offset(5, 5),
       fp.Offset(-1, -1),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'relativeLineTo before any moveTo (origin is implicit)',
+    (t) {
+      t
+        ..relativeLineTo(10, 0)
+        ..relativeLineTo(0, 10)
+        ..relativeLineTo(-10, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(5, 5), // inside the resulting square
+      fp.Offset(11, 5),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'relativeMoveTo + relativeLineTo build a square',
+    (t) {
+      t
+        ..relativeMoveTo(2, 3)
+        ..relativeLineTo(10, 0)
+        ..relativeLineTo(0, 10)
+        ..relativeLineTo(-10, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(7, 8), // inside (square is at (2,3)-(12,13))
+      fp.Offset(0, 0),
+      fp.Offset(15, 15),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addPolygon (closed=true) builds a triangle',
+    (t) => t.addPolygon(
+      const [(0.0, 0.0), (10.0, 0.0), (5.0, 10.0)],
+      true,
+    ),
+    const [
+      fp.Offset(5, 2),
+      fp.Offset(5, 4),
+      fp.Offset(0, 9),
+      fp.Offset(10, 9),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addPolygon (closed=false) leaves the contour open',
+    (t) => t.addPolygon(
+      const [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)],
+      false,
+    ),
+    const [
+      fp.Offset(5, 5), // implicit close still fills the interior
+      fp.Offset(-1, 5),
+      fp.Offset(11, 5),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addPolygon empty list is a no-op',
+    (t) => t.addPolygon(const <(double, double)>[], true),
+    _gridFar,
+  ),
+
+  _Case(
+    'lineTo after close opens a fresh contour at the closed start',
+    // Catches the post-close implicit moveTo: without it, the second
+    // line would extend the just-closed contour and produce a different
+    // shape than dart:ui.
+    (t) {
+      t
+        ..moveTo(5, 5)
+        ..lineTo(15, 5)
+        ..close()
+        ..lineTo(7, 8) // expected: implicit moveTo(5, 5), then lineTo(7, 8)
+        ..close();
+    },
+    const [
+      fp.Offset(8, 6), // near the second segment, well off any edge
+      fp.Offset(10, 4), // near first segment but above its degenerate band
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'multiple close() calls in a row are idempotent',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..lineTo(10, 0)
+        ..lineTo(10, 10)
+        ..close()
+        ..close()
+        ..close();
+    },
+    const [
+      fp.Offset(7, 5),
+      fp.Offset(11, 5),
       ..._gridFar,
     ],
   ),

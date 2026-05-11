@@ -4,6 +4,22 @@
 
 ### Added
 
+- `PathBuilder.relativeMoveTo`, `PathBuilder.relativeLineTo`, and
+  `PathBuilder.addPolygon` round out the M0 builder surface to match
+  `dart:ui.Path`.
+- Conformance corpus expanded with relative-method, `addPolygon`, and
+  post-close mutation cases (40 conformance tests total).
+
+### Fixed
+
+- `PathBuilder.lineTo` (and the new `relativeLineTo`) after `close` now
+  inject an implicit `moveTo` at the just-closed contour's start, matching
+  Skia / `dart:ui.Path` behavior. Previously the verb stream silently
+  extended the closed contour, which produced subtly different `contains`
+  results on shapes that mixed `close` with subsequent line segments.
+- `PathBuilder.close` is now idempotent — repeated calls with no
+  intervening mutation no longer emit duplicate `close` verbs.
+
 - M0 — geometry types and the builder/path split.
   - Geometry value types: `Offset`, `Size`, `Rect`, `Radius`, `RRect`,
     `PathFillType`.

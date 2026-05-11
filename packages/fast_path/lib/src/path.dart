@@ -43,11 +43,10 @@ final class PathBuilder {
     builder._points.setRange(0, path._points.length, path._points);
     builder._conicWeights
         .setRange(0, path._conicWeights.length, path._conicWeights);
-    builder._lastMoveToIndex = _findLastMoveToIndex(
-      builder._verbs,
-      builder._verbsLen,
-      builder._points,
-    );
+    final (lastMove, closed) =
+        _scanBuilderState(builder._verbs, builder._verbsLen);
+    builder._lastMoveToIndex = lastMove;
+    builder._contourClosed = closed;
     return builder;
   }
 
@@ -61,6 +60,7 @@ final class PathBuilder {
       .._pointsLen = other._pointsLen
       .._conicWeightsLen = other._conicWeightsLen
       .._lastMoveToIndex = other._lastMoveToIndex
+      .._contourClosed = other._contourClosed
       ..fillType = other.fillType;
     builder._verbs.setRange(0, other._verbsLen, other._verbs);
     builder._points.setRange(0, other._pointsLen, other._points);
@@ -85,6 +85,12 @@ final class PathBuilder {
   /// point to connect back to.
   int _lastMoveToIndex = -1;
 
+  /// True after a successful [close] until the next [moveTo] (explicit or
+  /// implicitly injected). When set, the next mutation that would extend a
+  /// contour first injects an implicit `moveTo` at the just-closed contour's
+  /// start, mirroring `dart:ui.Path` (and Skia) behavior.
+  bool _contourClosed = false;
+
   /// The fill type the produced [Path] will use.
   ///
   /// Behaves identically to `Path.fillType` in `dart:ui`, except that the
@@ -101,12 +107,27 @@ final class PathBuilder {
     _lastMoveToIndex = _pointsLen;
     _appendVerb(verbMove);
     _appendPoint(x, y);
+    _contourClosed = false;
+  }
+
+  /// Starts a new contour at the current point plus `(dx, dy)`.
+  ///
+  /// If no contour has been started, the current point is taken to be the
+  /// origin, matching `dart:ui.Path`'s behavior.
+  ///
+  /// Behaves identically to `Path.relativeMoveTo` in `dart:ui`, except that
+  /// this method lives on [PathBuilder] rather than `Path`.
+  void relativeMoveTo(double dx, double dy) {
+    final (cx, cy) = _currentPoint();
+    moveTo(cx + dx, cy + dy);
   }
 
   /// Adds a straight line segment from the current point to `(x, y)`.
   ///
   /// If no contour has been started, an implicit `moveTo(0, 0)` is injected
-  /// first, matching `dart:ui.Path`'s behavior.
+  /// first. If the previous operation was [close], an implicit `moveTo` is
+  /// injected at the just-closed contour's start so the new segment opens a
+  /// fresh contour. Both behaviors mirror `dart:ui.Path`.
   ///
   /// Behaves identically to `Path.lineTo` in `dart:ui`, except that this
   /// method lives on [PathBuilder] rather than `Path`.
@@ -116,19 +137,53 @@ final class PathBuilder {
     _appendPoint(x, y);
   }
 
+  /// Adds a straight line segment from the current point to the current
+  /// point plus `(dx, dy)`.
+  ///
+  /// Behaves identically to `Path.relativeLineTo` in `dart:ui`, except that
+  /// this method lives on [PathBuilder] rather than `Path`. See [lineTo] for
+  /// implicit-moveTo behavior.
+  void relativeLineTo(double dx, double dy) {
+    final (cx, cy) = _currentPoint();
+    lineTo(cx + dx, cy + dy);
+  }
+
+  /// Adds a contour consisting of straight line segments connecting [points]
+  /// in order. If [close] is true, the contour is closed back to
+  /// `points.first`.
+  ///
+  /// An empty [points] list is a no-op, matching `dart:ui.Path.addPolygon`.
+  ///
+  /// Behaves identically to `Path.addPolygon` in `dart:ui`, except that this
+  /// method lives on [PathBuilder] rather than `Path`.
+  void addPolygon(List<Offset> points, bool close) {
+    if (points.isEmpty) {
+      return;
+    }
+    moveTo(points[0].dx, points[0].dy);
+    for (var i = 1; i < points.length; i++) {
+      lineTo(points[i].dx, points[i].dy);
+    }
+    if (close) {
+      this.close();
+    }
+  }
+
   /// Closes the current contour by connecting the current point back to the
   /// most recent `moveTo`.
   ///
-  /// If there is no open contour to close, this is a no-op (matching
-  /// `dart:ui.Path.close`).
+  /// If there is no open contour to close (no prior `moveTo`, or the most
+  /// recent contour is already closed), this is a no-op. Both behaviors
+  /// match `dart:ui.Path.close`.
   ///
   /// Behaves identically to `Path.close` in `dart:ui`, except that this
   /// method lives on [PathBuilder] rather than `Path`.
   void close() {
-    if (_lastMoveToIndex < 0) {
+    if (_lastMoveToIndex < 0 || _contourClosed) {
       return;
     }
     _appendVerb(verbClose);
+    _contourClosed = true;
   }
 
   /// Removes all contours and resets to an empty path. Backing buffer
@@ -141,6 +196,7 @@ final class PathBuilder {
     _pointsLen = 0;
     _conicWeightsLen = 0;
     _lastMoveToIndex = -1;
+    _contourClosed = false;
     fillType = PathFillType.nonZero;
   }
 
@@ -177,7 +233,26 @@ final class PathBuilder {
   void _injectMoveToIfNeeded() {
     if (_lastMoveToIndex < 0) {
       moveTo(0.0, 0.0);
+    } else if (_contourClosed) {
+      // The previous contour was closed; reopen at its start so the next
+      // segment begins a fresh contour rather than silently extending the
+      // closed one. Matches Skia's `injectMoveToIfNeeded`.
+      moveTo(_points[_lastMoveToIndex], _points[_lastMoveToIndex + 1]);
     }
+  }
+
+  /// Returns the current point — the implicit "from" position used by the
+  /// next mutation. After [close], this is the start of the just-closed
+  /// contour. Before any mutation, it is the origin.
+  (double, double) _currentPoint() {
+    if (_verbsLen == 0) {
+      return (0.0, 0.0);
+    }
+    final lastVerb = _verbs[_verbsLen - 1];
+    if (lastVerb == verbClose) {
+      return (_points[_lastMoveToIndex], _points[_lastMoveToIndex + 1]);
+    }
+    return (_points[_pointsLen - 2], _points[_pointsLen - 1]);
   }
 
   void _appendVerb(int verb) {
@@ -225,13 +300,13 @@ final class PathBuilder {
     return next;
   }
 
-  /// Walks the verb stream of an inherited buffer to find where the most
-  /// recent `moveTo`'s coordinates start. Used by [PathBuilder.from] when
-  /// reconstructing builder state from a [Path].
-  static int _findLastMoveToIndex(
+  /// Walks the verb stream of an inherited buffer to recover the builder
+  /// state that isn't represented directly in the verb/point arrays:
+  /// the `_lastMoveToIndex` cursor, and whether the trailing contour was
+  /// closed. Used by [PathBuilder.from] when reseeding from a [Path].
+  static (int lastMoveToIndex, bool contourClosed) _scanBuilderState(
     Uint8List verbs,
     int verbsLen,
-    Float32List points,
   ) {
     var pointIdx = 0;
     var lastMoveToIndex = -1;
@@ -242,7 +317,8 @@ final class PathBuilder {
       }
       pointIdx += verbPointCount[verb] * 2;
     }
-    return lastMoveToIndex;
+    final contourClosed = verbsLen > 0 && verbs[verbsLen - 1] == verbClose;
+    return (lastMoveToIndex, contourClosed);
   }
 }
 

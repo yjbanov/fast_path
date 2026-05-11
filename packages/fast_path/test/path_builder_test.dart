@@ -148,4 +148,142 @@ void main() {
       );
     });
   });
+
+  group('PathBuilder relative methods', () {
+    test('relativeMoveTo before any contour treats current as origin', () {
+      final path = (PathBuilder()..relativeMoveTo(5.0, 5.0)).build();
+      expect(
+        path.getBounds(),
+        equals(const Rect.fromLTRB(5.0, 5.0, 5.0, 5.0)),
+      );
+    });
+
+    test('relativeMoveTo accumulates from current point', () {
+      final path = (PathBuilder()
+            ..moveTo(2.0, 3.0)
+            ..lineTo(5.0, 7.0)
+            ..relativeMoveTo(1.0, 2.0)) // expected start: (6, 9)
+          .build();
+      expect(
+        path.getBounds(),
+        equals(const Rect.fromLTRB(2.0, 3.0, 6.0, 9.0)),
+      );
+    });
+
+    test('relativeLineTo before any contour starts at origin', () {
+      final path = (PathBuilder()..relativeLineTo(10.0, 10.0)).build();
+      expect(
+        path.getBounds(),
+        equals(const Rect.fromLTRB(0.0, 0.0, 10.0, 10.0)),
+      );
+    });
+
+    test('relativeLineTo accumulates from current point', () {
+      final path = (PathBuilder()
+            ..moveTo(0.0, 0.0)
+            ..relativeLineTo(3.0, 4.0)
+            ..relativeLineTo(2.0, -1.0))
+          .build();
+      // Walks from (0,0) to (3,4) to (5,3).
+      expect(
+        path.getBounds(),
+        equals(const Rect.fromLTRB(0.0, 0.0, 5.0, 4.0)),
+      );
+    });
+
+    test('relativeMoveTo after close starts from the just-closed start', () {
+      final path = (PathBuilder()
+            ..moveTo(0.0, 0.0)
+            ..lineTo(10.0, 0.0)
+            ..close() // current point reverts to (0, 0)
+            ..relativeMoveTo(5.0, 5.0)) // start a new contour at (5, 5)
+          .build();
+      expect(
+        path.getBounds(),
+        equals(const Rect.fromLTRB(0.0, 0.0, 10.0, 5.0)),
+      );
+    });
+  });
+
+  group('PathBuilder addPolygon', () {
+    test('empty list is a no-op', () {
+      final path = (PathBuilder()..addPolygon(const [], true)).build();
+      expect(path.getBounds(), equals(Rect.zero));
+    });
+
+    test('builds a single contour from an offset list', () {
+      final path = (PathBuilder()
+            ..addPolygon(
+              const [
+                Offset(0.0, 0.0),
+                Offset(10.0, 0.0),
+                Offset(10.0, 10.0),
+                Offset(0.0, 10.0),
+              ],
+              true,
+            ))
+          .build();
+      expect(
+        path.getBounds(),
+        equals(const Rect.fromLTRB(0.0, 0.0, 10.0, 10.0)),
+      );
+      // Closed polygon: interior is filled.
+      expect(path.contains(const Offset(5.0, 5.0)), isTrue);
+    });
+
+    test('close=false leaves the polygon open', () {
+      final path = (PathBuilder()
+            ..addPolygon(
+              const [
+                Offset(0.0, 0.0),
+                Offset(10.0, 0.0),
+                Offset(10.0, 10.0),
+              ],
+              false,
+            ))
+          .build();
+      expect(
+        path.getBounds(),
+        equals(const Rect.fromLTRB(0.0, 0.0, 10.0, 10.0)),
+      );
+    });
+  });
+
+  group('PathBuilder close idempotency and post-close mutation', () {
+    test('close on an already-closed contour is a no-op', () {
+      final builderA = PathBuilder()
+        ..moveTo(0.0, 0.0)
+        ..lineTo(10.0, 0.0)
+        ..close();
+      final builderB = PathBuilder()
+        ..moveTo(0.0, 0.0)
+        ..lineTo(10.0, 0.0)
+        ..close()
+        ..close()
+        ..close();
+      // Same verb stream → structural equality holds.
+      expect(builderB.build(), equals(builderA.build()));
+    });
+
+    test('lineTo after close starts a new contour at the closed start', () {
+      // moveTo(5,5); lineTo(10,5); close; lineTo(7,8) should produce two
+      // contours: the first closed segment, then a fresh segment from (5,5)
+      // — not a phantom segment from (10,5).
+      final path = (PathBuilder()
+            ..moveTo(5.0, 5.0)
+            ..lineTo(10.0, 5.0)
+            ..close()
+            ..lineTo(7.0, 8.0))
+          .build();
+      // (10, 5) is the end of the first contour and is no longer "current".
+      // After the implicit moveTo back to (5, 5), the new segment is
+      // (5,5)→(7,8), and the implicit close-for-fill brings it back to
+      // (5,5) — degenerate, zero area. Bounds still cover everything we
+      // touched.
+      expect(
+        path.getBounds(),
+        equals(const Rect.fromLTRB(5.0, 5.0, 10.0, 8.0)),
+      );
+    });
+  });
 }
