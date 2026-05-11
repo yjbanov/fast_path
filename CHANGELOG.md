@@ -4,11 +4,31 @@
 
 ### Added
 
+- `packages/fast_path_bench/` — pure-Dart benchmark package backed by
+  `package:benchmark_harness`. Three starter benchmarks: `build_polyline_1k`
+  (per-frame construction), `contains_grid_1024` (hit-testing throughput),
+  and `bounds_warm_1k` (cached `getBounds` cost). Each benchmark XORs its
+  result into a sink that the runner observes after `measure()`, so JIT/AOT
+  dead-code elimination cannot silently invalidate the numbers.
+- `bin/run_all.dart` runs every benchmark and prints either a
+  human-readable table (default) or a JSON report (`--json`). The JSON
+  format is the contract that future AOT / dart2js / dart2wasm runners
+  will share.
+- `tool/bench.sh` — JIT entry point. Forwards args to `run_all.dart`.
 - `PathBuilder.relativeMoveTo`, `PathBuilder.relativeLineTo`, and
   `PathBuilder.addPolygon` round out the M0 builder surface to match
   `dart:ui.Path`.
 - Conformance corpus expanded with relative-method, `addPolygon`, and
   post-close mutation cases (40 conformance tests total).
+
+### Changed
+
+- `tool/check.sh` now passes `--offline` to `dart pub get` and `--no-pub`
+  to `flutter test`. Both skip a network round-trip / re-resolution that
+  the workspace doesn't need on every check; total local check time stays
+  in the ~3 s range despite the new bench package.
+- CI's Flutter step also passes `--no-pub` for the same reason (the
+  workspace is already resolved by the preceding `dart pub get`).
 
 ### Fixed
 

@@ -43,7 +43,7 @@ run_phase() {
 T_START=$(now_ms)
 
 run_phase "dart pub get (workspace)" \
-  dart pub get
+  dart pub get --offline
 
 run_phase "dart analyze (workspace)" \
   dart analyze
@@ -52,8 +52,12 @@ run_phase "dart test (fast_path)" \
   bash -c "cd packages/fast_path && dart test --reporter=compact"
 
 if command -v flutter >/dev/null 2>&1; then
+  # --no-pub: the workspace was already resolved by `dart pub get` above.
+  # Flutter would otherwise re-resolve, which scales with workspace size
+  # and noticeably dominates this phase once the workspace has more than
+  # a couple of packages.
   run_phase "flutter test (fast_path_conformance)" \
-    bash -c "cd packages/fast_path_conformance && flutter test --reporter=compact"
+    bash -c "cd packages/fast_path_conformance && flutter test --reporter=compact --no-pub"
 else
   echo
   echo "==> SKIPPED: flutter test (fast_path_conformance) — flutter not in PATH"

@@ -1,0 +1,18 @@
+name: fast_path_bench
+description: >-
+  Benchmarks for the fast_path package. Pure Dart so the benchmark classes
+  can be hosted by either a `dart run` entry point or a future Flutter
+  desktop / web app. Not published to pub.dev.
+publish_to: none
+
+resolution: workspace
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  fast_path: any
+  benchmark_harness: ^2.2.0
+
+dev_dependencies:
+  lints: ^4.0.0

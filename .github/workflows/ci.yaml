@@ -33,4 +33,5 @@ jobs:
 
       - name: Conformance tests vs dart:ui
         working-directory: packages/fast_path_conformance
-        run: flutter test --reporter=expanded
+        # --no-pub: workspace already resolved by `dart pub get` above.
+        run: flutter test --reporter=expanded --no-pub
