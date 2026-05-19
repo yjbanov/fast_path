@@ -14,7 +14,12 @@
   human-readable table (default) or a JSON report (`--json`). The JSON
   format is the contract that future AOT / dart2js / dart2wasm runners
   will share.
-- `tool/bench.sh` — JIT entry point. Forwards args to `run_all.dart`.
+- `tool/bench.sh` — supports both `--mode=jit` (default, `dart run`) and
+  `--mode=aot` (compiles `bin/run_all.dart` to `build/run_all_aot` via
+  `dart compile exe`, then runs it). The mode label is forwarded into
+  the benchmark's own JSON metadata. dart2js, dart2wasm, and a Flutter
+  desktop AOT runner will plug in as additional cases on this same
+  switch.
 - `PathBuilder.relativeMoveTo`, `PathBuilder.relativeLineTo`, and
   `PathBuilder.addPolygon` round out the M0 builder surface to match
   `dart:ui.Path`.

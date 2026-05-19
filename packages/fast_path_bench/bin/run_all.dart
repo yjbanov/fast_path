@@ -20,6 +20,7 @@ import 'package:fast_path_bench/benchmarks.dart';
 
 void main(List<String> args) {
   final asJson = args.contains('--json');
+  final mode = _parseMode(args);
 
   final benches = allBenchmarks();
   final results = <_Result>[];
@@ -32,9 +33,9 @@ void main(List<String> args) {
   }
 
   if (asJson) {
-    _printJson(results);
+    _printJson(results, mode);
   } else {
-    _printTable(results);
+    _printTable(results, mode);
   }
 
   // Observe every benchmark's sink so the JIT / AOT compiler cannot prove
@@ -57,12 +58,37 @@ class _Result {
   final double nsPerOp;
 }
 
-void _printTable(List<_Result> results) {
+/// Recognized values for `--mode=`. The runner doesn't enforce a closed
+/// set so future deployments (dart2js, dart2wasm, flutter-desktop) can
+/// pass through their own label without needing a code change here — but
+/// these are the labels the project's tooling currently produces.
+const _knownModes = <String>{
+  'jit',
+  'aot',
+};
+
+String _parseMode(List<String> args) {
+  for (final arg in args) {
+    if (arg.startsWith('--mode=')) {
+      final v = arg.substring('--mode='.length);
+      if (!_knownModes.contains(v)) {
+        stderr.writeln(
+          'warning: unrecognized --mode=$v '
+          '(known: ${_knownModes.join(', ')})',
+        );
+      }
+      return v;
+    }
+  }
+  return 'jit';
+}
+
+void _printTable(List<_Result> results, String mode) {
   final nameWidth = results
       .map((r) => r.name.length)
       .fold<int>(8, (a, b) => a > b ? a : b);
 
-  stdout.writeln('mode: jit  os: ${Platform.operatingSystem}');
+  stdout.writeln('mode: $mode  os: ${Platform.operatingSystem}');
   stdout.writeln('');
   stdout.writeln(
     '${'benchmark'.padRight(nameWidth)}  ${'ns/op'.padLeft(12)}  '
@@ -78,11 +104,11 @@ void _printTable(List<_Result> results) {
   }
 }
 
-void _printJson(List<_Result> results) {
+void _printJson(List<_Result> results, String mode) {
   final report = <String, Object?>{
     'metadata': <String, Object?>{
       'timestamp': DateTime.now().toUtc().toIso8601String(),
-      'mode': 'jit',
+      'mode': mode,
       'os': Platform.operatingSystem,
       'dart_version': Platform.version,
     },
