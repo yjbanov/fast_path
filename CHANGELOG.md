@@ -14,12 +14,22 @@
   human-readable table (default) or a JSON report (`--json`). The JSON
   format is the contract that future AOT / dart2js / dart2wasm runners
   will share.
-- `tool/bench.sh` — supports both `--mode=jit` (default, `dart run`) and
+- `tool/bench.sh` — supports `--mode=jit` (default, `dart run`),
   `--mode=aot` (compiles `bin/run_all.dart` to `build/run_all_aot` via
-  `dart compile exe`, then runs it). The mode label is forwarded into
-  the benchmark's own JSON metadata. dart2js, dart2wasm, and a Flutter
-  desktop AOT runner will plug in as additional cases on this same
-  switch.
+  `dart compile exe`, then runs it), and `--mode=flutter-desktop`
+  (compiles + runs the Flutter desktop app via `flutter run --release`
+  on macOS or Linux, then greps the canonical JSON out of the
+  surrounding banner). The mode label is forwarded into the benchmark's
+  own JSON metadata. dart2js / dart2wasm modes will plug in as
+  additional cases on this same switch.
+- `packages/fast_path_bench_flutter/` — Flutter-hosted bench app. Brings
+  `dart:ui.Path` benchmarks alongside the existing fast_path ones so a
+  single run produces side-by-side numbers. Desktop builds run benches
+  at startup, write JSON to stdout, and exit (a platform window flashes
+  briefly — Cocoa / GTK create it before Dart's `main()` runs). Web
+  builds present a "Run benchmarks" button; results render on screen
+  and `print()` to the browser console. To run the web suite manually:
+  `cd packages/fast_path_bench_flutter && flutter run -d chrome --release`.
 - `PathBuilder.relativeMoveTo`, `PathBuilder.relativeLineTo`, and
   `PathBuilder.addPolygon` round out the M0 builder surface to match
   `dart:ui.Path`.

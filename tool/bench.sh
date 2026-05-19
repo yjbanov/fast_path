@@ -6,10 +6,19 @@
 #   tool/bench.sh --json                # JIT, JSON output
 #   tool/bench.sh --mode=aot            # AOT-compiled native binary
 #   tool/bench.sh --mode=aot --json     # AOT, JSON output
+#   tool/bench.sh --mode=flutter-desktop
+#                                       # Flutter desktop --release (AOT,
+#                                       # has dart:ui — compares fast_path
+#                                       # against dart:ui in the same run).
+#                                       # Always emits JSON to stdout.
 #
 # The --mode label is also forwarded into the benchmark's own metadata so
-# JSON consumers can tell runs apart. dart2js, dart2wasm, and a Flutter
-# desktop AOT runner will plug into this same script as additional cases.
+# JSON consumers can tell runs apart. dart2js and dart2wasm modes will
+# plug into this same switch as additional cases.
+#
+# To run the web benchmark suite manually:
+#   cd packages/fast_path_bench_flutter
+#   flutter run -d chrome --release    # opens browser, click "Run benchmarks"
 
 set -euo pipefail
 
@@ -44,8 +53,28 @@ case "$mode" in
     exec ./build/run_all_aot --mode=aot "${args[@]+"${args[@]}"}"
     ;;
 
+  flutter-desktop)
+    case "$(uname -s)" in
+      Darwin) device="macos" ;;
+      Linux)  device="linux" ;;
+      *)
+        echo "flutter-desktop mode: unsupported host OS $(uname -s)" >&2
+        exit 2
+        ;;
+    esac
+    cd packages/fast_path_bench_flutter
+    # flutter run prints its own progress chatter to stderr/stdout.
+    # --release gives us AOT-compiled Dart. The app's main() prints the
+    # canonical JSON report to stdout and then exit(0)s, so `flutter run`
+    # detaches and returns. We grep the JSON object out of the surrounding
+    # banner so callers see clean machine-readable output on stdout.
+    echo "==> flutter run --release -d $device" >&2
+    flutter run --release -d "$device" 2>/dev/null \
+      | awk '/^\{/{ printing=1 } printing { print } /^\}$/{ printing=0 }'
+    ;;
+
   *)
-    echo "Unknown --mode=$mode (expected: jit, aot)" >&2
+    echo "Unknown --mode=$mode (expected: jit, aot, flutter-desktop)" >&2
     exit 2
     ;;
 esac

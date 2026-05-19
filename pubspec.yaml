@@ -9,3 +9,4 @@ workspace:
   - packages/fast_path_conformance
   - packages/fast_path_flutter
   - packages/fast_path_bench
+  - packages/fast_path_bench_flutter
