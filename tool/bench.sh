@@ -55,22 +55,43 @@ case "$mode" in
 
   flutter-desktop)
     case "$(uname -s)" in
-      Darwin) device="macos" ;;
-      Linux)  device="linux" ;;
+      Darwin)
+        device="macos"
+        binary_relpath="build/macos/Build/Products/Release/fast_path_bench_flutter.app/Contents/MacOS/fast_path_bench_flutter"
+        ;;
+      Linux)
+        device="linux"
+        case "$(uname -m)" in
+          x86_64) linux_arch="x64" ;;
+          aarch64|arm64) linux_arch="arm64" ;;
+          *)
+            echo "flutter-desktop mode: unsupported linux arch $(uname -m)" >&2
+            exit 2
+            ;;
+        esac
+        binary_relpath="build/linux/$linux_arch/release/bundle/fast_path_bench_flutter"
+        ;;
       *)
         echo "flutter-desktop mode: unsupported host OS $(uname -s)" >&2
         exit 2
         ;;
     esac
+
     cd packages/fast_path_bench_flutter
-    # flutter run prints its own progress chatter to stderr/stdout.
-    # --release gives us AOT-compiled Dart. The app's main() prints the
-    # canonical JSON report to stdout and then exit(0)s, so `flutter run`
-    # detaches and returns. We grep the JSON object out of the surrounding
-    # banner so callers see clean machine-readable output on stdout.
-    echo "==> flutter run --release -d $device" >&2
-    flutter run --release -d "$device" 2>/dev/null \
-      | awk '/^\{/{ printing=1 } printing { print } /^\}$/{ printing=0 }'
+
+    # Build, then exec the binary directly. `flutter run --release` would
+    # also AOT-compile, but its stdout handling is opaque (the daemon
+    # protocol does not reliably forward the app's stdout to the parent).
+    # `flutter build` produces the same binary and lets us read its stdout
+    # straight.
+    echo "==> flutter build $device --release" >&2
+    flutter build "$device" --release >&2
+
+    echo "==> running $binary_relpath" >&2
+    # Suppress stderr from the binary itself: the macOS embedder prints
+    # a "Running with merged UI and platform thread" banner there. Our
+    # JSON goes to stdout, which is what callers consume.
+    exec "$binary_relpath" 2>/dev/null
     ;;
 
   *)
