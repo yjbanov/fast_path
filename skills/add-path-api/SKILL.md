@@ -15,10 +15,13 @@ description: Use whenever a method, getter, setter, constructor, or related type
 
 The behavior of each operation must match `dart:ui.Path`. The *shape* —
 which class hosts the method — is the deliberate divergence. Every public
-method, getter, and constructor we add is a behavioral parity claim. This
-skill is the checklist for making that claim safely: pick the right class,
-match the operation's behavior, stay allocation-clean, no native bindings,
-and ship tests that prove the parity claim instead of hoping for it.
+method, getter, and constructor we add is *also* a performance claim:
+fast_path exists to be faster than the FFI boundary, and a method we
+can't measure is one we can't defend. This skill is the checklist for
+making both claims safely: pick the right class, match the operation's
+behavior, stay allocation-clean, no native bindings, and ship tests +
+benchmarks (both sides) that prove the parity and perf claims instead
+of hoping for them.
 
 ## Why this matters
 
@@ -221,13 +224,42 @@ Add new top-level types to `lib/fast_path.dart`'s exports. Add an entry to
 architecture (e.g. moves a method from `PathBuilder` to `Path` or vice
 versa), update `DESIGN.md`.
 
-### 9. Benchmark anything in the hot path
+### 9. Benchmarks: required, both sides
 
-If the new method is plausibly called in a tight loop (builder methods
-called every frame, `Path.contains` called per pointer event, `getBounds`
-called per layout pass), add a benchmark under `benchmark/` that compares
-the equivalent dart:ui call sequence. The benchmark doesn't have to win
-on day one; it has to exist, so we notice regressions later.
+Every public `PathBuilder` / `Path` operation ships with at least one
+benchmark — non-negotiable, same bar as tests. "It's not on the hot path"
+is not an escape hatch: the project's whole pitch is performance, and a
+method without a benchmark is a method whose perf claim is unmeasured.
+Two files, both required for the PR:
+
+**fast_path benchmark**
+(`packages/fast_path_bench/lib/src/<area>.dart`, registered in
+`packages/fast_path_bench/lib/benchmarks.dart`):
+
+- Extends `FastPathBenchmark` (provides single-call `exercise()`,
+  `opsPerRun` normalization, and the `sink` blackhole for defeating
+  dead-code elimination — use it).
+- Workload is realistic, not synthetic. A 1k-segment polyline, a
+  1024-point hit-test grid, a 1000-call cached query loop — pick a
+  shape that mirrors how the method will actually be called.
+- Result is XOR-ed into `sink` so the JIT / AOT compiler cannot prove
+  the work is dead.
+
+**dart:ui counterpart benchmark**
+(`packages/fast_path_bench_flutter/lib/src/ui_benchmarks.dart`):
+
+- Mirrors the fast_path workload as closely as `dart:ui.Path`'s shape
+  allows (one object that's both builder and path, no separate `build()`
+  step, etc.). Document any unavoidable asymmetry inline.
+- Extends the same `FastPathBenchmark` base so the runner is uniform.
+- Picked up automatically by `tool/bench.sh --mode=flutter-desktop`
+  (Linux/macOS AOT with real `dart:ui`) and the web "Run benchmarks"
+  button.
+
+The benchmarks don't have to *win* on day one. They have to *exist* so
+regressions are visible. Run `tool/bench.sh` and `tool/bench.sh --mode=aot`
+locally and quote the numbers in the PR description; if a number looks
+wrong, dig in before merging.
 
 ## Quick checklist (use before opening a PR)
 
@@ -253,7 +285,16 @@ on day one; it has to exist, so we notice regressions later.
       on `PathBuilder` + `Path` and on `ui.Path`, and is green under
       `flutter test`.
 - [ ] `CHANGELOG.md` updated; `DESIGN.md` updated if architecture moved.
-- [ ] If on the hot path: benchmark added under `benchmark/`.
+- [ ] Benchmark added in `packages/fast_path_bench/lib/src/` and
+      registered in `packages/fast_path_bench/lib/benchmarks.dart`.
+- [ ] `dart:ui` counterpart benchmark added in
+      `packages/fast_path_bench_flutter/lib/src/ui_benchmarks.dart`
+      (skip only if the operation has no `dart:ui.Path` equivalent — in
+      which case it should have been escalated at step 1).
+- [ ] Both benchmarks observe their result via `sink` (XOR pattern) so
+      the JIT / AOT compiler cannot dead-code-eliminate the work.
+- [ ] Local `tool/bench.sh` and `tool/bench.sh --mode=aot` runs quoted
+      in the PR description.
 
 ## Things to escalate to the human, not decide alone
 

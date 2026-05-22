@@ -7,12 +7,14 @@ See [DESIGN.md](DESIGN.md) for full design rationale.
 
 ```
 packages/
-  fast_path/              Core library — pure Dart, published to pub.dev
-  fast_path_conformance/  Parity tests against dart:ui — Flutter only, not published
-  fast_path_flutter/      Future Flutter bridge — not yet implemented
+  fast_path/                 Core library — pure Dart, published to pub.dev
+  fast_path_conformance/     Parity tests against dart:ui — Flutter only, not published
+  fast_path_flutter/         Future Flutter bridge — not yet implemented
+  fast_path_bench/           Pure-Dart benchmarks (JIT + AOT-native runners)
+  fast_path_bench_flutter/   Flutter-hosted benchmarks (desktop AOT + manual web)
 skills/
-  add-path-api/           Checklist for adding/changing PathBuilder or Path API
-  port-from-skia/         Checklist for porting algorithms from Skia/Flutter
+  add-path-api/              Checklist for adding/changing PathBuilder or Path API
+  port-from-skia/            Checklist for porting algorithms from Skia/Flutter
 ```
 
 ## Hard rules
@@ -46,6 +48,16 @@ Every new method needs a passing test in
 `packages/fast_path_conformance/test/parity/` that replays the same call
 sequence on both `fast_path` and `dart:ui.Path` and asserts agreement within
 the tolerances documented in DESIGN.md §8.2.
+
+**Benchmarks are required before a method is done.**
+Every new public method needs a benchmark in
+`packages/fast_path_bench/lib/src/` (and registered in
+`packages/fast_path_bench/lib/benchmarks.dart`) plus a `dart:ui`
+counterpart in `packages/fast_path_bench_flutter/lib/src/ui_benchmarks.dart`.
+"It's not on the hot path" is not an escape hatch — the project's pitch
+is performance, so every operation has to be measurable. Both benchmarks
+XOR their result into the `FastPathBenchmark.sink` so the compiler can't
+elide the work. See `skills/add-path-api/SKILL.md` §9 for the full shape.
 
 ## Skills
 
