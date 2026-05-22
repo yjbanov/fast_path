@@ -5,11 +5,17 @@
 ### Added
 
 - `packages/fast_path_bench/` — pure-Dart benchmark package backed by
-  `package:benchmark_harness`. Three starter benchmarks: `build_polyline_1k`
-  (per-frame construction), `contains_grid_1024` (hit-testing throughput),
-  and `bounds_warm_1k` (cached `getBounds` cost). Each benchmark XORs its
-  result into a sink that the runner observes after `measure()`, so JIT/AOT
-  dead-code elimination cannot silently invalidate the numbers.
+  `package:benchmark_harness`. Each benchmark XORs its result into a sink
+  that the runner observes after `measure()`, so JIT/AOT dead-code
+  elimination cannot silently invalidate the numbers. M0 surface now has
+  comprehensive coverage:
+  - Construction: `build_polyline_1k` (per-frame reuse),
+    `build_polyline_cold_1k` (fresh builder per iter), `add_polygon_1k`
+    (convenience API), `relative_polyline_1k` (relativeMoveTo /
+    relativeLineTo), `path_from_path_1k` (PathBuilder.from reseed).
+  - Queries: `contains_grid_1024`, `bounds_warm_1k`, `bounds_cold_1k`.
+  - Identity: `path_equality_1k` (deep structural compare; no dart:ui
+    counterpart since `ui.Path` uses identity equality).
 - `bin/run_all.dart` runs every benchmark and prints either a
   human-readable table (default) or a JSON report (`--json`). The JSON
   format is the contract that future AOT / dart2js / dart2wasm runners

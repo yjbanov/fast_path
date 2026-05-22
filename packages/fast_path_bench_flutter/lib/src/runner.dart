@@ -27,13 +27,22 @@ class BenchResult {
 
 /// Returns every benchmark this runner knows about: the fp suite from
 /// [fp.allBenchmarks] plus the `dart:ui` mirrors defined in this package.
-/// The order pairs each fp benchmark with its ui counterpart for a
-/// side-by-side reading of the output table.
+/// Order matches the fp catalog so the JSON output reads as a
+/// side-by-side table. The `path_equality_1k` fp benchmark has no ui
+/// counterpart (ui.Path uses identity equality) and falls at the end of
+/// the fp block.
 List<fp.FastPathBenchmark> allBenchmarks() => <fp.FastPathBenchmark>[
       ...fp.allBenchmarks(),
+      // Construction.
       BuildPolylineUi1kBenchmark(),
+      BuildPolylineColdUi1kBenchmark(),
+      AddPolygonUi1kBenchmark(),
+      RelativePolylineUi1kBenchmark(),
+      PathFromPathUi1kBenchmark(),
+      // Queries.
       ContainsGridUi1024Benchmark(),
       BoundsWarmUi1kBenchmark(),
+      BoundsColdUi1kBenchmark(),
     ];
 
 /// Runs every benchmark and returns the results in declaration order.
