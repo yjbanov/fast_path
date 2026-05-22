@@ -36,6 +36,21 @@
   builds present a "Run benchmarks" button; results render on screen
   and `print()` to the browser console. To run the web suite manually:
   `cd packages/fast_path_bench_flutter && flutter run -d chrome --release`.
+- `lib/src/catalog.dart` introduces a structured catalog: `PairedBenchmark`
+  for workloads with both a fast_path and a `dart:ui` implementation,
+  `SoloBenchmark` for fast_path-only features. The Flutter UI groups
+  cards by category; the catalog also drives the JSON output (results
+  are now emitted in pair-adjacent order, fp/ui interleaved).
+
+### Changed
+
+- `fast_path_bench_flutter` web UI replaced the raw JSON dump with
+  Material 3 cards. Paired benchmarks show fast_path on the left and
+  `dart:ui` on the right separated by a `VerticalDivider`, with a delta
+  badge on the fast_path side ("−39% vs dart:ui" in green when winning,
+  red when losing). Solo benchmarks render as a single-value card. The
+  canonical JSON is still `print()`-ed to the browser console for
+  copy-paste.
 - `PathBuilder.relativeMoveTo`, `PathBuilder.relativeLineTo`, and
   `PathBuilder.addPolygon` round out the M0 builder surface to match
   `dart:ui.Path`.

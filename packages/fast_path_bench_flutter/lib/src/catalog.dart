@@ -1,0 +1,138 @@
+// Copyright 2026 The fast_path Authors.
+// Use of this source code is governed by the BSD-3-Clause license in the
+// project root LICENSE file.
+
+import 'package:fast_path_bench/benchmarks.dart' as fp;
+
+import 'ui_benchmarks.dart';
+
+/// A benchmark with no `dart:ui` counterpart — runs and reports alone.
+///
+/// Use when the operation is fast_path-specific (e.g. structural Path
+/// equality, which `dart:ui.Path` lacks). The UI presents these in a
+/// dedicated "fast_path only" section.
+class SoloBenchmark {
+  const SoloBenchmark({
+    required this.displayName,
+    required this.description,
+    required this.create,
+  });
+
+  /// Short title shown at the top of the card.
+  final String displayName;
+
+  /// One-line explanation of the workload, shown under the title.
+  final String description;
+
+  /// Factory for the benchmark. Called once per run so `setup` state
+  /// doesn't leak across runs.
+  final fp.FastPathBenchmark Function() create;
+}
+
+/// A pair of benchmarks measuring the same workload — one via
+/// `fast_path`, one via `dart:ui.Path`. The UI presents these
+/// side-by-side with a [VerticalDivider] between them.
+class PairedBenchmark {
+  const PairedBenchmark({
+    required this.displayName,
+    required this.description,
+    required this.createFp,
+    required this.createUi,
+  });
+
+  /// Short title shown at the top of the card.
+  final String displayName;
+
+  /// One-line explanation of the workload.
+  final String description;
+
+  /// Factory for the fast_path side. Called once per run.
+  final fp.FastPathBenchmark Function() createFp;
+
+  /// Factory for the `dart:ui` side. Called once per run.
+  final fp.FastPathBenchmark Function() createUi;
+}
+
+/// All paired benchmarks. Order is the order the UI renders cards and
+/// the JSON output lists results.
+///
+/// Adding a new pair here is what wires it into the Flutter-hosted
+/// benchmark suite — the runner and UI both pick it up automatically.
+List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
+      PairedBenchmark(
+        displayName: 'Build polyline — per-frame reuse',
+        description:
+            '1000 lineTo segments on a reused builder (reset + close + '
+            'build). Models the custom-painter pattern.',
+        createFp: fp.BuildPolyline1kBenchmark.new,
+        createUi: BuildPolylineUi1kBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Build polyline — fresh builder',
+        description:
+            'Same workload, but allocates a fresh PathBuilder each '
+            'iteration. Captures the cold construction cost.',
+        createFp: fp.BuildPolylineCold1kBenchmark.new,
+        createUi: BuildPolylineColdUi1kBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Add polygon',
+        description:
+            '1000-vertex polygon built via the addPolygon convenience '
+            'API.',
+        createFp: fp.AddPolygon1kBenchmark.new,
+        createUi: AddPolygonUi1kBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Relative polyline',
+        description:
+            '1000 relativeMoveTo / relativeLineTo segments. Exposes '
+            'current-point bookkeeping overhead.',
+        createFp: fp.RelativePolyline1kBenchmark.new,
+        createUi: RelativePolylineUi1kBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Clone path',
+        description:
+            'PathBuilder.from(path).build() — the edit-an-existing-path '
+            'pattern, no mutation, isolates the buffer-copy cost.',
+        createFp: fp.PathFromPath1kBenchmark.new,
+        createUi: PathFromPathUi1kBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Hit-test grid',
+        description:
+            '1024 contains() queries against a 100-vertex star polygon.',
+        createFp: fp.ContainsGrid1024Benchmark.new,
+        createUi: ContainsGridUi1024Benchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'getBounds — cached',
+        description:
+            '1000 calls on a path whose bounds cache is primed. Should '
+            'bottom out at a cached field load.',
+        createFp: fp.BoundsWarm1kBenchmark.new,
+        createUi: BoundsWarmUi1kBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'getBounds — first call',
+        description:
+            'Fresh path each iteration so getBounds always walks every '
+            'point. Build cost is bundled in.',
+        createFp: fp.BoundsCold1kBenchmark.new,
+        createUi: BoundsColdUi1kBenchmark.new,
+      ),
+    ];
+
+/// All solo benchmarks. These are fast_path-specific features with no
+/// `dart:ui` equivalent.
+List<SoloBenchmark> allSolos() => const <SoloBenchmark>[
+      SoloBenchmark(
+        displayName: 'Path equality',
+        description:
+            '100 deep structural compares on two equal-but-distinct '
+            'paths. No dart:ui counterpart — ui.Path uses identity '
+            'equality.',
+        create: fp.PathEquality1kBenchmark.new,
+      ),
+    ];
