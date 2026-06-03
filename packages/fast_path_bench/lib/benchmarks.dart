@@ -16,6 +16,9 @@ import 'src/bounds_cold.dart';
 import 'src/bounds_warm.dart';
 import 'src/build_polyline.dart';
 import 'src/build_polyline_cold.dart';
+import 'src/builder_clone.dart';
+import 'src/builder_from_path.dart';
+import 'src/builder_snapshot.dart';
 import 'src/contains_grid.dart';
 import 'src/path_equality.dart';
 import 'src/path_from_path.dart';
@@ -27,6 +30,9 @@ export 'src/bounds_cold.dart';
 export 'src/bounds_warm.dart';
 export 'src/build_polyline.dart';
 export 'src/build_polyline_cold.dart';
+export 'src/builder_clone.dart';
+export 'src/builder_from_path.dart';
+export 'src/builder_snapshot.dart';
 export 'src/contains_grid.dart';
 export 'src/path_equality.dart';
 export 'src/path_from_path.dart';
@@ -35,9 +41,11 @@ export 'src/relative_polyline.dart';
 /// The canonical list of fast_path benchmarks. Add new benchmarks here so
 /// every runner picks them up.
 ///
-/// Order: construction benches first, then queries, then identity. Mirror
-/// pairs in `fast_path_bench_flutter/lib/src/ui_benchmarks.dart` should
-/// follow the same order so the side-by-side table reads cleanly.
+/// Order: construction benches first, then queries, then conversions
+/// (fp-only — dart:ui doesn't split builder from path), then identity
+/// (fp-only — dart:ui uses identity equality). Mirror pairs in
+/// `fast_path_bench_flutter/lib/src/ui_benchmarks.dart` follow the same
+/// order so the side-by-side table reads cleanly.
 List<FastPathBenchmark> allBenchmarks() => <FastPathBenchmark>[
       // Construction.
       BuildPolyline1kBenchmark(),
@@ -49,6 +57,10 @@ List<FastPathBenchmark> allBenchmarks() => <FastPathBenchmark>[
       ContainsGrid1024Benchmark(),
       BoundsWarm1kBenchmark(),
       BoundsCold1kBenchmark(),
-      // Identity (no dart:ui counterpart — ui.Path uses identity equality).
+      // Conversions (fp-only).
+      BuilderFromPath1kBenchmark(),
+      BuilderSnapshot1kBenchmark(),
+      BuilderClone1kBenchmark(),
+      // Identity (fp-only).
       PathEquality1kBenchmark(),
     ];

@@ -14,6 +14,11 @@
     (convenience API), `relative_polyline_1k` (relativeMoveTo /
     relativeLineTo), `path_from_path_1k` (PathBuilder.from reseed).
   - Queries: `contains_grid_1024`, `bounds_warm_1k`, `bounds_cold_1k`.
+  - Conversions (fp-only — dart:ui has no separate builder):
+    `builder_from_path_1k` (Path → PathBuilder copy), `builder_snapshot_1k`
+    (PathBuilder → Path snapshot), `builder_clone_1k` (PathBuilder →
+    PathBuilder clone). Each isolates one direction so the existing
+    `path_from_path_1k` round-trip can be attributed to its parts.
   - Identity: `path_equality_1k` (deep structural compare; no dart:ui
     counterpart since `ui.Path` uses identity equality).
 - `bin/run_all.dart` runs every benchmark and prints either a

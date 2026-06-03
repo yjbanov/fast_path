@@ -128,6 +128,30 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
 /// `dart:ui` equivalent.
 List<SoloBenchmark> allSolos() => const <SoloBenchmark>[
       SoloBenchmark(
+        displayName: 'PathBuilder.from(path)',
+        description:
+            'Reseed a builder from a 1k-segment immutable Path. Isolates '
+            'the Path → PathBuilder copy. fast_path-only — dart:ui has '
+            'no separate builder.',
+        create: fp.BuilderFromPath1kBenchmark.new,
+      ),
+      SoloBenchmark(
+        displayName: 'PathBuilder.build()',
+        description:
+            'Snapshot a 1k-segment builder into a fresh immutable Path '
+            '(build does not mutate the builder, so it is called per '
+            'run). fast_path-only — dart:ui has no separate snapshot '
+            'step.',
+        create: fp.BuilderSnapshot1kBenchmark.new,
+      ),
+      SoloBenchmark(
+        displayName: 'PathBuilder.fromBuilder(other)',
+        description:
+            'Clone a 1k-segment builder into a fresh working copy. '
+            'fast_path-only — dart:ui has no builder to clone.',
+        create: fp.BuilderClone1kBenchmark.new,
+      ),
+      SoloBenchmark(
         displayName: 'Path equality',
         description:
             '100 deep structural compares on two equal-but-distinct '
