@@ -38,6 +38,13 @@
 
 ### Changed
 
+- `Path.contains` rejects curve segments cheaply before invoking the
+  analytic solvers: if the query's y is strictly outside the segment's
+  control-hull y-range, or px is at/beyond the hull's max x, the
+  segment cannot contribute a crossing and the solver is skipped. On
+  the 1024-query grid benchmarks (AOT) this cut quad contains by 33%,
+  conic by 24%, and cubic by 75% — flipping cubic contains from 2.6×
+  slower than `dart:ui` to 32% faster.
 - `Path.getBounds` semantics clarified in the implementation comment:
   it returns **loose** bounds (bbox of every stored point, including
   off-curve control points). This matches `dart:ui.Path.getBounds()`

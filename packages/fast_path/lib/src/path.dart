@@ -584,11 +584,27 @@ final class Path {
           final cy = _points[pointIdx + 1];
           final ex = _points[pointIdx + 2];
           final ey = _points[pointIdx + 3];
-          final (qWinding, qCrossings) = _quadCrossingsForRay(
-            curX, curY, cx, cy, ex, ey, px, py,
-          );
-          winding += qWinding;
-          crossings += qCrossings;
+          // Quick reject on the control hull: the curve lies inside the
+          // convex hull of its control points, so if the ray's y is
+          // strictly outside the hull's y-range there is no root, and if
+          // px is at or beyond the hull's max x no root can satisfy
+          // x(t) > px. Strict y comparisons keep endpoint ties flowing
+          // to the solver, which owns the tie-break rules.
+          var yMin = curY < cy ? curY : cy;
+          if (ey < yMin) yMin = ey;
+          var yMax = curY > cy ? curY : cy;
+          if (ey > yMax) yMax = ey;
+          if (py >= yMin && py <= yMax) {
+            var xMax = curX > cx ? curX : cx;
+            if (ex > xMax) xMax = ex;
+            if (px < xMax) {
+              final (qWinding, qCrossings) = _quadCrossingsForRay(
+                curX, curY, cx, cy, ex, ey, px, py,
+              );
+              winding += qWinding;
+              crossings += qCrossings;
+            }
+          }
           curX = ex;
           curY = ey;
           pointIdx += 4;
@@ -598,11 +614,24 @@ final class Path {
           final ex = _points[pointIdx + 2];
           final ey = _points[pointIdx + 3];
           final w = _conicWeights[weightIdx++];
-          final (kWinding, kCrossings) = _conicCrossingsForRay(
-            curX, curY, cx, cy, ex, ey, w, px, py,
-          );
-          winding += kWinding;
-          crossings += kCrossings;
+          // Same hull reject as the quad case: a conic with w > 0 is a
+          // convex combination of its control points, so the hull bound
+          // holds.
+          var yMin = curY < cy ? curY : cy;
+          if (ey < yMin) yMin = ey;
+          var yMax = curY > cy ? curY : cy;
+          if (ey > yMax) yMax = ey;
+          if (py >= yMin && py <= yMax) {
+            var xMax = curX > cx ? curX : cx;
+            if (ex > xMax) xMax = ex;
+            if (px < xMax) {
+              final (kWinding, kCrossings) = _conicCrossingsForRay(
+                curX, curY, cx, cy, ex, ey, w, px, py,
+              );
+              winding += kWinding;
+              crossings += kCrossings;
+            }
+          }
           curX = ex;
           curY = ey;
           pointIdx += 4;
@@ -613,11 +642,26 @@ final class Path {
           final c2y = _points[pointIdx + 3];
           final ex = _points[pointIdx + 4];
           final ey = _points[pointIdx + 5];
-          final (cWinding, cCrossings) = _cubicCrossingsForRay(
-            curX, curY, c1x, c1y, c2x, c2y, ex, ey, px, py,
-          );
-          winding += cWinding;
-          crossings += cCrossings;
+          // Hull reject before the (comparatively expensive) Cardano /
+          // trig solver.
+          var yMin = curY < c1y ? curY : c1y;
+          if (c2y < yMin) yMin = c2y;
+          if (ey < yMin) yMin = ey;
+          var yMax = curY > c1y ? curY : c1y;
+          if (c2y > yMax) yMax = c2y;
+          if (ey > yMax) yMax = ey;
+          if (py >= yMin && py <= yMax) {
+            var xMax = curX > c1x ? curX : c1x;
+            if (c2x > xMax) xMax = c2x;
+            if (ex > xMax) xMax = ex;
+            if (px < xMax) {
+              final (cWinding, cCrossings) = _cubicCrossingsForRay(
+                curX, curY, c1x, c1y, c2x, c2y, ex, ey, px, py,
+              );
+              winding += cWinding;
+              crossings += cCrossings;
+            }
+          }
           curX = ex;
           curY = ey;
           pointIdx += 6;
