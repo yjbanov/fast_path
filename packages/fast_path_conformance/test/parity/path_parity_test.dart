@@ -47,6 +47,8 @@ abstract class PathTarget {
     double dx3,
     double dy3,
   );
+  void conicTo(double x1, double y1, double x2, double y2, double w);
+  void relativeConicTo(double dx1, double dy1, double dx2, double dy2, double w);
   void addPolygon(List<(double, double)> points, bool close);
   void close();
   set evenOdd(bool value);
@@ -102,6 +104,20 @@ class _FpTarget implements PathTarget {
     double dy3,
   ) =>
       _b.relativeCubicTo(dx1, dy1, dx2, dy2, dx3, dy3);
+
+  @override
+  void conicTo(double x1, double y1, double x2, double y2, double w) =>
+      _b.conicTo(x1, y1, x2, y2, w);
+
+  @override
+  void relativeConicTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+    double w,
+  ) =>
+      _b.relativeConicTo(dx1, dy1, dx2, dy2, w);
 
   @override
   void addPolygon(List<(double, double)> points, bool close) =>
@@ -168,6 +184,20 @@ class _UiTarget implements PathTarget {
     double dy3,
   ) =>
       _p.relativeCubicTo(dx1, dy1, dx2, dy2, dx3, dy3);
+
+  @override
+  void conicTo(double x1, double y1, double x2, double y2, double w) =>
+      _p.conicTo(x1, y1, x2, y2, w);
+
+  @override
+  void relativeConicTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+    double w,
+  ) =>
+      _p.relativeConicTo(dx1, dy1, dx2, dy2, w);
 
   @override
   void addPolygon(List<(double, double)> points, bool close) =>
@@ -816,6 +846,141 @@ final List<_Case> _cases = <_Case>[
       fp.Offset(50, 60),
       fp.Offset(50, 20),
       fp.Offset(50, 5),
+      ..._gridFar,
+    ],
+  ),
+
+  // M1 — Conics.
+
+  _Case(
+    'quarter-circle pie via conic (w = sqrt(2)/2)',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..lineTo(100, 0)
+        // 0.70710678 ≈ sqrt(2)/2: exact quarter circle of radius 100.
+        ..conicTo(100, 100, 0, 100, 0.7071067811865476)
+        ..close();
+    },
+    const [
+      fp.Offset(60, 60), // r ≈ 84.9 — inside the arc
+      fp.Offset(74, 74), // r ≈ 104.7 — outside the arc, inside the hull
+      fp.Offset(10, 10),
+      fp.Offset(-10, 50),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'low-weight conic hugs the chord',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..conicTo(50, 100, 100, 0, 0.25)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 10), // inside (apex y = 100·0.25/1.25 = 20)
+      fp.Offset(50, 30), // outside
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'high-weight conic approaches the control polyline',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..conicTo(50, 100, 100, 0, 4.0)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 60), // inside (apex y = 100·4/5 = 80)
+      fp.Offset(50, 90), // outside
+      fp.Offset(10, 30),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'conic with w == 1 behaves as a quadratic',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..conicTo(50, 100, 100, 0, 1.0)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 30),
+      fp.Offset(50, 60), // above apex (apex y = 50)
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    // Verified empirically: current dart:ui (Impeller) normalizes
+    // invalid conic weights to w == 1 (a plain quadratic), NOT to a
+    // line as classic Skia documentation suggests.
+    'conic with invalid weights (0, negative, NaN, infinity) acts as quad',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..conicTo(50, 100, 100, 0, 0.0)
+        ..close()
+        ..moveTo(120, 0)
+        ..conicTo(170, 100, 220, 0, -3.0)
+        ..close()
+        ..moveTo(240, 0)
+        ..conicTo(290, 100, 340, 0, double.nan)
+        ..close()
+        ..moveTo(360, 0)
+        ..conicTo(410, 100, 460, 0, double.infinity)
+        ..close();
+    },
+    const [
+      // Quad apex is y = 50 for each lobe; probe just inside and out.
+      fp.Offset(50, 45),
+      fp.Offset(50, 55),
+      fp.Offset(170, 45),
+      fp.Offset(170, 55),
+      fp.Offset(290, 45),
+      fp.Offset(290, 55),
+      fp.Offset(410, 45),
+      fp.Offset(410, 55),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'relativeConicTo accumulates from current point',
+    (t) {
+      t
+        ..moveTo(10, 10)
+        ..relativeConicTo(40, 90, 90, 0, 0.7)
+        ..close();
+    },
+    const [
+      fp.Offset(55, 30),
+      fp.Offset(55, 70),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'mixed line + conic + cubic contour',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..lineTo(100, 0)
+        ..conicTo(120, 40, 100, 80, 0.8)
+        ..cubicTo(70, 110, 30, 110, 0, 80)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 40),
+      fp.Offset(50, 95),
+      fp.Offset(115, 40),
+      fp.Offset(-5, 40),
       ..._gridFar,
     ],
   ),

@@ -404,3 +404,84 @@ class ContainsQuadsGridUi1024Benchmark extends FastPathBenchmark {
     sink ^= hits;
   }
 }
+
+/// Mirrors `BuildConics500Benchmark`. 500-conic construction on a reused
+/// `ui.Path` with varying weights.
+class BuildConicsUi500Benchmark extends FastPathBenchmark {
+  BuildConicsUi500Benchmark() : super('build_conics_ui_500');
+
+  late ui.Path _path;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+  }
+
+  @override
+  void run() {
+    _path
+      ..reset()
+      ..moveTo(0, 0);
+    for (var i = 0; i < 500; i++) {
+      final cx = (i * 2.7) % 200;
+      final cy = (i * 1.3) % 100;
+      final ex = (i + 1) * 1.0;
+      final ey = ((i + 1) * 1.7) % 80;
+      final w = 0.3 + (i % 7) * 0.1;
+      _path.conicTo(cx, cy, ex, ey, w);
+    }
+    _path.close();
+    sink ^= _path.fillType.index;
+  }
+}
+
+/// Mirrors `ContainsConicsGrid1024Benchmark`. Same two-circle conic ring
+/// built once in [setup]; 1024 contains queries per run.
+class ContainsConicsGridUi1024Benchmark extends FastPathBenchmark {
+  ContainsConicsGridUi1024Benchmark()
+      : super('contains_conics_grid_ui_1024');
+
+  late ui.Path _path;
+  late List<ui.Offset> _samples;
+
+  @override
+  int get opsPerRun => _samples.length;
+
+  @override
+  void setup() {
+    final w = math.sqrt(2) / 2;
+    const cx = 50.0;
+    const cy = 50.0;
+    const r = 40.0;
+    _path = ui.Path()
+      ..moveTo(cx + r, cy)
+      ..conicTo(cx + r, cy + r, cx, cy + r, w)
+      ..conicTo(cx - r, cy + r, cx - r, cy, w)
+      ..conicTo(cx - r, cy - r, cx, cy - r, w)
+      ..conicTo(cx + r, cy - r, cx + r, cy, w)
+      ..close()
+      ..moveTo(cx + 20, cy)
+      ..conicTo(cx + 20, cy + 20, cx, cy + 20, w)
+      ..conicTo(cx - 20, cy + 20, cx - 20, cy, w)
+      ..conicTo(cx - 20, cy - 20, cx, cy - 20, w)
+      ..conicTo(cx + 20, cy - 20, cx + 20, cy, w)
+      ..close();
+
+    _samples = <ui.Offset>[
+      for (var ix = 0; ix < 32; ix++)
+        for (var iy = 0; iy < 32; iy++)
+          ui.Offset(ix * 4.0 - 15.0, iy * 4.0 - 15.0),
+    ];
+  }
+
+  @override
+  void run() {
+    var hits = 0;
+    for (var i = 0; i < _samples.length; i++) {
+      if (_path.contains(_samples[i])) {
+        hits++;
+      }
+    }
+    sink ^= hits;
+  }
+}

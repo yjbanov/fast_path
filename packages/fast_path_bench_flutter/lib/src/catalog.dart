@@ -108,6 +108,15 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: BuildQuadsUi500Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Build with conics',
+        description:
+            'Per-frame reuse, 500 conicTo segments with varying weights. '
+            'Conics are what ovals, arcs, and rounded rects decompose '
+            'into.',
+        createFp: fp.BuildConics500Benchmark.new,
+        createUi: BuildConicsUi500Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Build with cubics',
         description:
             'Per-frame reuse, 500 cubicTo segments. Three points per '
@@ -129,6 +138,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
             'the analytic quadratic-crossings hot path.',
         createFp: fp.ContainsQuadsGrid1024Benchmark.new,
         createUi: ContainsQuadsGridUi1024Benchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Hit-test grid (conics)',
+        description:
+            '1024 contains() queries against two concentric conic '
+            'circles. Stresses the rational quadratic-crossings solver.',
+        createFp: fp.ContainsConicsGrid1024Benchmark.new,
+        createUi: ContainsConicsGridUi1024Benchmark.new,
       ),
       PairedBenchmark(
         displayName: 'Hit-test grid (cubics)',

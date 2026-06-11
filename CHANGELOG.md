@@ -4,29 +4,37 @@
 
 ### Added
 
-- M1 partial — `PathBuilder.quadraticBezierTo(x1, y1, x2, y2)`,
-  `PathBuilder.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2)`,
-  `PathBuilder.cubicTo(x1, y1, x2, y2, x3, y3)`, and
-  `PathBuilder.relativeCubicTo(dx1, dy1, dx2, dy2, dx3, dy3)`. Match
-  `dart:ui.Path` semantics including implicit-`moveTo` and post-`close`
-  fresh-contour behavior.
-- `Path.contains` learned the `verbQuad` and `verbCubic` cases via
-  analytic root solvers. Quad solves a quadratic in `t` directly. Cubic
-  uses depression + Cardano (one real root) or trigonometric form
-  (three real roots), with explicit fallbacks for the quadratic /
-  linear / constant degenerate cases when the leading coefficient
-  vanishes. For each root `t ∈ [0, 1]` the same per-root helper applies
-  the half-open endpoint tie-break and `x(t) > px` filter; tangent
-  crossings (`y'(t) = 0`) contribute nothing. Records
-  `(winding, crossingCount)` so both nonZero and evenOdd fill rules
-  remain accurate across curve segments.
-- 7 new quad and 7 new cubic parity cases in
+- M1 complete (all curve verbs) — `PathBuilder.quadraticBezierTo`,
+  `relativeQuadraticBezierTo`, `cubicTo`, `relativeCubicTo`, `conicTo`,
+  and `relativeConicTo`. All match `dart:ui.Path` semantics including
+  implicit-`moveTo` and post-`close` fresh-contour behavior.
+- `conicTo` weight normalization matches *observed* current `dart:ui`
+  (Impeller) behavior, verified empirically with a probe program:
+  invalid weights (`w <= 0`, NaN, infinity) become a plain quadratic
+  through the same control point. Note this differs from classic Skia
+  documentation (which converts `w <= 0` to a line); a weight of
+  exactly 1 is also stored as a quadratic since the two are
+  geometrically identical.
+- `Path.contains` learned the `verbQuad`, `verbConic`, and `verbCubic`
+  cases via analytic root solvers. Quad solves a quadratic in `t`
+  directly. Conic multiplies through by its (strictly positive)
+  denominator, yielding the same quadratic shape with weighted
+  coefficients and a rational `x(t)`. Cubic uses depression + Cardano
+  (one real root) or trigonometric form (three real roots), with
+  explicit fallbacks for the quadratic / linear / constant degenerate
+  cases when the leading coefficient vanishes. For each root
+  `t ∈ [0, 1]` the same per-root helper applies the half-open endpoint
+  tie-break and `x(t) > px` filter; tangent crossings (`y'(t) = 0`)
+  contribute nothing. Records `(winding, crossingCount)` so both
+  nonZero and evenOdd fill rules remain accurate across curve segments.
+- 7 quad, 7 cubic, and 7 conic parity cases in
   `fast_path_conformance/test/parity/`. All pass against `dart:ui.Path`.
-- `build_quads_500` and `build_cubics_500` (per-frame builder reuse
-  with 500 curve segments each), `contains_quads_grid_1024` and
-  `contains_cubics_grid_1024` (1024 contains queries on a 64-quad and
-  a 32-cubic ring respectively). All have `dart:ui` counterparts; the
-  catalog wires them as `PairedBenchmark` entries.
+- `build_quads_500`, `build_conics_500`, and `build_cubics_500`
+  (per-frame builder reuse with 500 curve segments each);
+  `contains_quads_grid_1024`, `contains_conics_grid_1024`, and
+  `contains_cubics_grid_1024` (1024 contains queries against curve-
+  heavy fixtures). All have `dart:ui` counterparts; the catalog wires
+  them as `PairedBenchmark` entries.
 
 ### Changed
 

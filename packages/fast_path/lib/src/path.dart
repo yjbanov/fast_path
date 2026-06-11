@@ -222,6 +222,54 @@ final class PathBuilder {
     );
   }
 
+  /// Adds a conic (rational quadratic Bézier) segment from the current
+  /// point with control point `(x1, y1)` ending at `(x2, y2)`, weighted
+  /// by [w].
+  ///
+  /// Invalid weights — `w <= 0`, NaN, or infinite — are normalized to
+  /// `w == 1`, i.e. the segment becomes a plain quadratic Bézier through
+  /// the same control point. This matches the behavior observed in
+  /// current `dart:ui.Path.conicTo` (Impeller-backed; verified
+  /// empirically — note this differs from classic Skia documentation,
+  /// which converts `w <= 0` to a straight line). A weight of exactly 1
+  /// is also stored as a quadratic, since the two are geometrically
+  /// identical.
+  ///
+  /// Implicit-moveTo rules from [lineTo] apply.
+  ///
+  /// Behaves identically to `Path.conicTo` in `dart:ui`, except that this
+  /// method lives on [PathBuilder] rather than `Path`.
+  void conicTo(double x1, double y1, double x2, double y2, double w) {
+    if (!w.isFinite || w <= 0 || w == 1.0) {
+      // NaN, ±infinity, non-positive, and exactly-1 weights all behave
+      // as a plain quadratic in current dart:ui.
+      quadraticBezierTo(x1, y1, x2, y2);
+      return;
+    }
+    _injectMoveToIfNeeded();
+    _appendVerb(verbConic);
+    _appendPoint(x1, y1);
+    _appendPoint(x2, y2);
+    _appendConicWeight(w);
+  }
+
+  /// Conic segment from the current point with control point
+  /// current + `(dx1, dy1)` ending at current + `(dx2, dy2)`, weighted
+  /// by [w]. See [conicTo] for weight normalization.
+  ///
+  /// Behaves identically to `Path.relativeConicTo` in `dart:ui`, except
+  /// that this method lives on [PathBuilder] rather than `Path`.
+  void relativeConicTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+    double w,
+  ) {
+    final (cx, cy) = _currentPoint();
+    conicTo(cx + dx1, cy + dy1, cx + dx2, cy + dy2, w);
+  }
+
   /// Adds a contour consisting of straight line segments connecting [points]
   /// in order. If [close] is true, the contour is closed back to
   /// `points.first`.
@@ -344,6 +392,13 @@ final class PathBuilder {
     _points[_pointsLen++] = y;
   }
 
+  void _appendConicWeight(double w) {
+    if (_conicWeightsLen + 1 > _conicWeights.length) {
+      _conicWeights = _growF32(_conicWeights, _conicWeightsLen + 1);
+    }
+    _conicWeights[_conicWeightsLen++] = w;
+  }
+
   static Uint8List _growU8(Uint8List old, int needed) {
     if (old.length >= needed) {
       return old;
@@ -411,7 +466,6 @@ final class Path {
 
   final Uint8List _verbs;
   final Float32List _points;
-  // ignore: unused_field — populated for future curve verbs (M1+).
   final Float32List _conicWeights;
 
   /// The fill type used when interpreting this path's interior.
@@ -488,6 +542,7 @@ final class Path {
     var crossings = 0;
     var winding = 0;
     var pointIdx = 0;
+    var weightIdx = 0;
     var startX = 0.0;
     var startY = 0.0;
     var curX = 0.0;
@@ -537,6 +592,20 @@ final class Path {
           curX = ex;
           curY = ey;
           pointIdx += 4;
+        case verbConic:
+          final cx = _points[pointIdx];
+          final cy = _points[pointIdx + 1];
+          final ex = _points[pointIdx + 2];
+          final ey = _points[pointIdx + 3];
+          final w = _conicWeights[weightIdx++];
+          final (kWinding, kCrossings) = _conicCrossingsForRay(
+            curX, curY, cx, cy, ex, ey, w, px, py,
+          );
+          winding += kWinding;
+          crossings += kCrossings;
+          curX = ex;
+          curY = ey;
+          pointIdx += 4;
         case verbCubic:
           final c1x = _points[pointIdx];
           final c1y = _points[pointIdx + 1];
@@ -563,8 +632,7 @@ final class Path {
           curY = startY;
           contourOpen = false;
         default:
-          // M1 still owes conic. It lands in a follow-up commit.
-          assert(false, 'Unsupported verb in M1: $verb');
+          assert(false, 'Unknown verb: $verb');
       }
     }
 
@@ -727,6 +795,121 @@ final class Path {
 
     final omt = 1 - t;
     final x = omt * omt * x0 + 2 * omt * t * x1 + t * t * x2;
+    if (x <= px) {
+      return (0, 0);
+    }
+
+    return yPrime > 0 ? (1, 1) : (-1, 1);
+  }
+
+  /// Analytic crossings of a single conic (rational quadratic Bézier)
+  /// against the horizontal ray from `(px, py)` to `+x`. Returns
+  /// `(windingDelta, crossingCount)`.
+  ///
+  /// The conic is `B(t) = N(t) / D(t)` with
+  ///
+  ///     N(t) = (1-t)²·P0 + 2w·(1-t)t·P1 + t²·P2
+  ///     D(t) = (1-t)²    + 2w·(1-t)t    + t²
+  ///
+  /// Setting `y(t) = py` and multiplying through by `D(t)` (strictly
+  /// positive for `w > 0` on `t ∈ [0, 1]`) gives a plain quadratic:
+  ///
+  ///     f(t) = (1-t)²·c0 + 2(1-t)t·c1 + t²·c2 = 0
+  ///     c0 = y0 - py,  c1 = w·(y1 - py),  c2 = y2 - py
+  ///
+  /// i.e. `a·t² + b·t + c` with `a = c0 - 2c1 + c2`, `b = 2(c1 - c0)`,
+  /// `c = c0`. Because `y - py = f / D` and `D > 0`, the crossing
+  /// direction at a root is `sign(f'(t)) = sign(2at + b)` — identical in
+  /// shape to the quad case. Only the `x(t)` evaluation differs (it's
+  /// rational).
+  ///
+  /// Callers guarantee `0 < w < ∞` and `w != 1`: [PathBuilder.conicTo]
+  /// normalizes degenerate weights to lines / quads before they ever
+  /// reach the verb buffer.
+  static (int, int) _conicCrossingsForRay(
+    double x0,
+    double y0,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double w,
+    double px,
+    double py,
+  ) {
+    final c0 = y0 - py;
+    final c1 = w * (y1 - py);
+    final c2 = y2 - py;
+    final a = c0 - 2 * c1 + c2;
+    final b = 2 * (c1 - c0);
+
+    if (a == 0) {
+      if (b == 0) {
+        return (0, 0);
+      }
+      final t = -c0 / b;
+      if (t < 0 || t > 1) {
+        return (0, 0);
+      }
+      return _conicRootContribution(t, a, b, x0, x1, x2, w, px);
+    }
+
+    final discriminant = b * b - 4 * a * c0;
+    if (discriminant < 0) {
+      return (0, 0);
+    }
+    final sqrtD = math.sqrt(discriminant);
+    final twoA = 2 * a;
+    final t1 = (-b - sqrtD) / twoA;
+    final t2 = (-b + sqrtD) / twoA;
+
+    var winding = 0;
+    var crossings = 0;
+
+    if (t1 >= 0 && t1 <= 1) {
+      final (rw, rc) = _conicRootContribution(t1, a, b, x0, x1, x2, w, px);
+      winding += rw;
+      crossings += rc;
+    }
+    if (discriminant > 0 && t2 >= 0 && t2 <= 1) {
+      final (rw, rc) = _conicRootContribution(t2, a, b, x0, x1, x2, w, px);
+      winding += rw;
+      crossings += rc;
+    }
+
+    return (winding, crossings);
+  }
+
+  /// Contribution of a single root `t` of the conic's `y(t) = py` to the
+  /// ray-crossing count. Same tie-break rules as [_quadRootContribution];
+  /// `x(t)` is the rational conic evaluation.
+  static (int, int) _conicRootContribution(
+    double t,
+    double a,
+    double b,
+    double x0,
+    double x1,
+    double x2,
+    double w,
+    double px,
+  ) {
+    final yPrime = b + 2 * a * t;
+    if (yPrime == 0) {
+      return (0, 0); // tangent crossing
+    }
+    if (t == 0 && yPrime < 0) {
+      return (0, 0);
+    }
+    if (t == 1 && yPrime > 0) {
+      return (0, 0);
+    }
+
+    final omt = 1 - t;
+    final basis0 = omt * omt;
+    final basis1 = 2 * w * omt * t;
+    final basis2 = t * t;
+    final denom = basis0 + basis1 + basis2;
+    final x = (basis0 * x0 + basis1 * x1 + basis2 * x2) / denom;
     if (x <= px) {
       return (0, 0);
     }
