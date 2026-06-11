@@ -2,6 +2,7 @@
 // Use of this source code is governed by the BSD-3-Clause license in the
 // project root LICENSE file.
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'geometry.dart';
@@ -554,19 +555,35 @@ final class Path {
     return crossesDown ? 1 : -1;
   }
 
-  /// Recursive adaptive flattening for a single quadratic Bézier, used by
-  /// [contains]. Returns the pair `(windingDelta, crossingCount)` —
-  /// winding for the nonZero rule (signed sum), crossing count for the
-  /// evenOdd rule (each line segment that crosses the ray counts once).
+  /// Analytic crossings of a single quadratic Bézier against a horizontal
+  /// ray cast from `(px, py)` to `+x`. Returns
+  /// `(windingDelta, crossingCount)` — the signed sum for the nonZero
+  /// fill rule, and the unsigned count for evenOdd.
   ///
-  /// A curve is treated as flat when the squared perpendicular distance
-  /// from its control point to its chord falls below
-  /// [_quadFlatnessSq]; the leaf is then handed off to
-  /// [_edgeWindingDelta] as a single line segment. Otherwise we subdivide
-  /// at `t = 0.5` via De Casteljau and recurse on both halves.
-  static const double _quadFlatness = 0.25;
-  static const double _quadFlatnessSq = _quadFlatness * _quadFlatness;
-
+  /// The curve is `B(t) = (1-t)²·P0 + 2(1-t)t·P1 + t²·P2`. Setting
+  /// `y(t) = py` yields a quadratic in `t`:
+  ///
+  ///     a·t² + b·t + c = 0
+  ///     a = y0 - 2y1 + y2
+  ///     b = 2(y1 - y0)
+  ///     c = y0 - py
+  ///
+  /// For each real root in `[0, 1]`, we compute `x(t)` and the sign of
+  /// `y'(t) = b + 2at` to determine the crossing direction. Tie-breaking
+  /// at endpoints matches the line-segment convention used by
+  /// [_edgeWindingDelta]: a vertex on the ray is counted by the segment
+  /// that LEAVES the vertex going downward (positive `y'` at `t = 0`) or
+  /// the segment that ARRIVES at the vertex going upward (negative `y'`
+  /// at `t = 1`). Tangent crossings (`y' = 0`) contribute nothing.
+  ///
+  /// Handles two boundary cases explicitly:
+  ///
+  /// - `a = 0` (curve is linear in `t`): single root at `-c/b`. Skip if
+  ///   `b = 0` (degenerate constant).
+  /// - `discriminant < 0`: the curve never reaches `py`. No crossings.
+  /// - `discriminant = 0`: double root, curve grazes `py` tangentially.
+  ///   Processed once; `y'(t)` at that root is `0` so the tangent guard
+  ///   suppresses it.
   static (int, int) _quadCrossingsForRay(
     double x0,
     double y0,
@@ -577,43 +594,85 @@ final class Path {
     double px,
     double py,
   ) {
-    final dx = x2 - x0;
-    final dy = y2 - y0;
-    final lenSq = dx * dx + dy * dy;
-    double distSq;
-    if (lenSq == 0) {
-      // Degenerate chord (P0 == P2): use the raw P1 → P0 distance, which
-      // bounds how far the curve can deviate.
-      final ex = x1 - x0;
-      final ey = y1 - y0;
-      distSq = ex * ex + ey * ey;
-    } else {
-      // Perpendicular distance² from (x1, y1) to the line through
-      // (x0, y0) and (x2, y2): (cross product)² / chord length².
-      final cross = (x1 - x0) * dy - (y1 - y0) * dx;
-      distSq = (cross * cross) / lenSq;
+    final a = y0 - 2 * y1 + y2;
+    final b = 2 * (y1 - y0);
+    final c = y0 - py;
+
+    if (a == 0) {
+      // Linear in t: b·t + c = 0.
+      if (b == 0) {
+        return (0, 0);
+      }
+      final t = -c / b;
+      if (t < 0 || t > 1) {
+        return (0, 0);
+      }
+      return _quadRootContribution(t, a, b, x0, x1, x2, px);
     }
 
-    if (distSq <= _quadFlatnessSq) {
-      final delta = _edgeWindingDelta(x0, y0, x2, y2, px, py);
-      return (delta, delta != 0 ? 1 : 0);
+    final discriminant = b * b - 4 * a * c;
+    if (discriminant < 0) {
+      return (0, 0);
+    }
+    final sqrtD = math.sqrt(discriminant);
+    final twoA = 2 * a;
+    final t1 = (-b - sqrtD) / twoA;
+    final t2 = (-b + sqrtD) / twoA;
+
+    var winding = 0;
+    var crossings = 0;
+
+    if (t1 >= 0 && t1 <= 1) {
+      final (w, c) = _quadRootContribution(t1, a, b, x0, x1, x2, px);
+      winding += w;
+      crossings += c;
+    }
+    // When discriminant == 0 the two roots coincide (a single double
+    // root). Process only once to avoid double-counting; the tangent
+    // guard inside `_quadRootContribution` will zero it out anyway.
+    if (discriminant > 0 && t2 >= 0 && t2 <= 1) {
+      final (w, c) = _quadRootContribution(t2, a, b, x0, x1, x2, px);
+      winding += w;
+      crossings += c;
     }
 
-    // De Casteljau subdivision at t = 0.5.
-    final mx01 = (x0 + x1) * 0.5;
-    final my01 = (y0 + y1) * 0.5;
-    final mx12 = (x1 + x2) * 0.5;
-    final my12 = (y1 + y2) * 0.5;
-    final mx = (mx01 + mx12) * 0.5;
-    final my = (my01 + my12) * 0.5;
+    return (winding, crossings);
+  }
 
-    final (lw, lc) = _quadCrossingsForRay(
-      x0, y0, mx01, my01, mx, my, px, py,
-    );
-    final (rw, rc) = _quadCrossingsForRay(
-      mx, my, mx12, my12, x2, y2, px, py,
-    );
-    return (lw + rw, lc + rc);
+  /// Contribution of a single root `t` of `y(t) = py` to the ray-crossing
+  /// count. Encapsulates the half-open endpoint tie-break and the
+  /// `x(t) > px` filter.
+  static (int, int) _quadRootContribution(
+    double t,
+    double a,
+    double b,
+    double x0,
+    double x1,
+    double x2,
+    double px,
+  ) {
+    final yPrime = b + 2 * a * t;
+    if (yPrime == 0) {
+      // Tangent crossing: the curve touches the ray without traversing
+      // it. No winding contribution either way.
+      return (0, 0);
+    }
+    // Endpoint half-open convention: vertex on the ray is counted by the
+    // segment that LEAVES going downward or ARRIVES going upward.
+    if (t == 0 && yPrime < 0) {
+      return (0, 0);
+    }
+    if (t == 1 && yPrime > 0) {
+      return (0, 0);
+    }
+
+    final omt = 1 - t;
+    final x = omt * omt * x0 + 2 * omt * t * x1 + t * t * x2;
+    if (x <= px) {
+      return (0, 0);
+    }
+
+    return yPrime > 0 ? (1, 1) : (-1, 1);
   }
 
   @override

@@ -8,12 +8,14 @@
   `PathBuilder.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2)`. Match
   `dart:ui.Path` semantics including implicit-`moveTo` and post-`close`
   fresh-contour behavior.
-- `Path.contains` learned the `verbQuad` case via recursive adaptive
-  subdivision (De Casteljau, perpendicular-distance flatness with a
-  squared tolerance of 0.0625 path-local units²). Each flattened leaf
-  returns to the existing line-segment `_edgeWindingDelta`. Records
-  (winding, crossingCount) so both nonZero and evenOdd fill rules
-  remain accurate across curve segments.
+- `Path.contains` learned the `verbQuad` case via analytic
+  quadratic-crossing solver. For each quad, solve `y(t) = py` directly
+  for `t ∈ [0, 1]`, compute `x(t)`, count by sign of `y'(t)`. Half-open
+  endpoint tie-break matches the line-segment convention so vertices
+  on the ray are counted exactly once; tangent crossings (`y' = 0`)
+  contribute nothing. Records `(winding, crossingCount)` so both
+  nonZero and evenOdd fill rules remain accurate. Replaced an initial
+  recursive-flattening implementation; see "Changed" below.
 - 7 new quad parity cases in `fast_path_conformance/test/parity/`.
   All pass against `dart:ui.Path`.
 - `build_quads_500` (per-frame builder reuse, 500 quads) and
@@ -29,14 +31,12 @@
   and Skia's `SkPath::getBounds()`; the tight alternative
   (`computeTightBounds`-style) is deferred to a future API addition
   if a caller needs it.
-
-### Known limitations
-
-- `contains` on curve-heavy paths is significantly slower than
-  `dart:ui` (~5× on `contains_quads_grid`) because our recursive
-  flattening does O(N) work per query while Skia's native path likely
-  uses analytic quadratic-crossings. A future commit can swap in
-  analytic crossings to close the gap.
+- `Path.contains` quad handling: replaced an initial recursive-
+  flattening implementation with the analytic solver described above.
+  On the `contains_quads_grid_1024` benchmark (Flutter desktop AOT,
+  macOS arm64), the per-query cost dropped from 2.33 µs (5× slower
+  than `dart:ui`) to 398 ns (13% faster than `dart:ui`) — the no-FFI
+  advantage now applies to curve queries as well as line queries.
 
 - `packages/fast_path_bench/` — pure-Dart benchmark package backed by
   `package:benchmark_harness`. Each benchmark XORs its result into a sink
