@@ -21,6 +21,13 @@
   edge. Zero-radius corners stay sharp. Parity covers uniform radii,
   oversized radii (stadium shape), and per-corner elliptical radii.
   `add_rrects_500` benchmark pair added.
+- `PathBuilder.arcTo(Rect, startAngle, sweepAngle, forceMoveTo)` and
+  `PathBuilder.addArc(Rect, startAngle, sweepAngle)`: elliptical arcs
+  chopped into ≤90° conic segments (weight cos(halfSweep), control at
+  the tangent intersection). `forceMoveTo` chooses between starting a
+  fresh contour and joining with a line from the current point. Sweeps
+  clamp to ±2π (verified against dart:ui with a 3π parity case).
+  `add_arcs_500` benchmark pair added.
 
 
 - M1 complete (all curve verbs) — `PathBuilder.quadraticBezierTo`,

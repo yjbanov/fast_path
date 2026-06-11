@@ -409,6 +409,82 @@ final class PathBuilder {
     close();
   }
 
+  /// Adds an arc segment along the ellipse inscribed in [rect], starting
+  /// at [startAngle] radians (0 = +x axis, positive = clockwise on
+  /// screen) and sweeping [sweepAngle] radians.
+  ///
+  /// If [forceMoveTo] is true the arc starts a new contour; otherwise a
+  /// straight line connects the current point to the arc's start (with
+  /// the usual implicit `moveTo(0, 0)` when the path is empty). Sweeps
+  /// beyond a full circle are clamped to ±2π.
+  ///
+  /// Behaves identically to `Path.arcTo` in `dart:ui`, except that this
+  /// method lives on [PathBuilder] rather than `Path`.
+  void arcTo(
+    Rect rect,
+    double startAngle,
+    double sweepAngle,
+    bool forceMoveTo,
+  ) {
+    final cx = (rect.left + rect.right) / 2;
+    final cy = (rect.top + rect.bottom) / 2;
+    final rx = (rect.right - rect.left) / 2;
+    final ry = (rect.bottom - rect.top) / 2;
+
+    final sx = cx + rx * math.cos(startAngle);
+    final sy = cy + ry * math.sin(startAngle);
+    if (forceMoveTo) {
+      moveTo(sx, sy);
+    } else {
+      lineTo(sx, sy);
+    }
+
+    var sweep = sweepAngle;
+    const twoPi = 2 * math.pi;
+    if (sweep > twoPi) {
+      sweep = twoPi;
+    } else if (sweep < -twoPi) {
+      sweep = -twoPi;
+    }
+    if (sweep == 0) {
+      return;
+    }
+
+    // Chop into segments of at most 90° so each is representable as a
+    // single conic with weight cos(halfSweep). Control point on the
+    // unit circle sits at the mid-angle, pushed out to 1/cos(halfSweep)
+    // (the intersection of the endpoint tangents).
+    final n = (sweep.abs() / (math.pi / 2)).ceil();
+    final delta = sweep / n;
+    final half = delta / 2;
+    final w = math.cos(half.abs());
+    final controlScale = 1 / w;
+
+    var a0 = startAngle;
+    for (var i = 0; i < n; i++) {
+      final a1 = a0 + delta;
+      final mid = a0 + half;
+      conicTo(
+        cx + rx * math.cos(mid) * controlScale,
+        cy + ry * math.sin(mid) * controlScale,
+        cx + rx * math.cos(a1),
+        cy + ry * math.sin(a1),
+        w,
+      );
+      a0 = a1;
+    }
+  }
+
+  /// Adds an arc along the ellipse inscribed in [oval], always starting
+  /// a new contour at the arc's start point. Equivalent to
+  /// `arcTo(oval, startAngle, sweepAngle, true)`.
+  ///
+  /// Behaves identically to `Path.addArc` in `dart:ui`, except that this
+  /// method lives on [PathBuilder] rather than `Path`.
+  void addArc(Rect oval, double startAngle, double sweepAngle) {
+    arcTo(oval, startAngle, sweepAngle, true);
+  }
+
   /// Closes the current contour by connecting the current point back to the
   /// most recent `moveTo`.
   ///

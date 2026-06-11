@@ -125,6 +125,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: AddRRectsUi500Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Add arcs',
+        description:
+            '500 addArc calls per run with quarter-to-full sweeps. '
+            'Models gauge / progress-ring painting.',
+        createFp: fp.AddArcs500Benchmark.new,
+        createUi: AddArcsUi500Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Build with quads',
         description:
             'Per-frame reuse, 500 quadraticBezierTo segments. Stresses '

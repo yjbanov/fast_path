@@ -63,6 +63,23 @@ abstract class PathTarget {
     required (double, double) bottomRight,
     required (double, double) bottomLeft,
   });
+  void arcTo(
+    double l,
+    double t,
+    double r,
+    double b,
+    double startAngle,
+    double sweepAngle,
+    bool forceMoveTo,
+  );
+  void addArc(
+    double l,
+    double t,
+    double r,
+    double b,
+    double startAngle,
+    double sweepAngle,
+  );
   void close();
   set evenOdd(bool value);
 }
@@ -173,6 +190,30 @@ class _FpTarget implements PathTarget {
         bottomRight: fp.Radius.elliptical(bottomRight.$1, bottomRight.$2),
         bottomLeft: fp.Radius.elliptical(bottomLeft.$1, bottomLeft.$2),
       ));
+
+  @override
+  void arcTo(
+    double l,
+    double t,
+    double r,
+    double b,
+    double startAngle,
+    double sweepAngle,
+    bool forceMoveTo,
+  ) =>
+      _b.arcTo(fp.Rect.fromLTRB(l, t, r, b), startAngle, sweepAngle,
+          forceMoveTo);
+
+  @override
+  void addArc(
+    double l,
+    double t,
+    double r,
+    double b,
+    double startAngle,
+    double sweepAngle,
+  ) =>
+      _b.addArc(fp.Rect.fromLTRB(l, t, r, b), startAngle, sweepAngle);
 
   @override
   void close() => _b.close();
@@ -288,6 +329,30 @@ class _UiTarget implements PathTarget {
         bottomRight: ui.Radius.elliptical(bottomRight.$1, bottomRight.$2),
         bottomLeft: ui.Radius.elliptical(bottomLeft.$1, bottomLeft.$2),
       ));
+
+  @override
+  void arcTo(
+    double l,
+    double t,
+    double r,
+    double b,
+    double startAngle,
+    double sweepAngle,
+    bool forceMoveTo,
+  ) =>
+      _p.arcTo(ui.Rect.fromLTRB(l, t, r, b), startAngle, sweepAngle,
+          forceMoveTo);
+
+  @override
+  void addArc(
+    double l,
+    double t,
+    double r,
+    double b,
+    double startAngle,
+    double sweepAngle,
+  ) =>
+      _p.addArc(ui.Rect.fromLTRB(l, t, r, b), startAngle, sweepAngle);
 
   @override
   void close() => _p.close();
@@ -1207,6 +1272,98 @@ final List<_Case> _cases = <_Case>[
       fp.Offset(4, 4), // elliptical top-left — outside
       fp.Offset(85, 85), // rounded bottom-right — outside
       fp.Offset(45, 87),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addArc half circle closed into a pie',
+    (t) {
+      t
+        ..addArc(0, 0, 90, 90, 0, 3.141592653589793)
+        ..close();
+    },
+    const [
+      fp.Offset(45, 70), // bottom half-disk
+      fp.Offset(20, 55),
+      fp.Offset(45, 20), // top half — empty
+      fp.Offset(45, 95),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'arcTo with forceMoveTo=false connects with a line',
+    (t) {
+      t
+        ..moveTo(0, 45)
+        ..arcTo(60, 0, 150, 90, 0, 3.141592653589793, false)
+        ..close();
+    },
+    const [
+      fp.Offset(105, 70), // inside the half-disk
+      fp.Offset(40, 50), // inside the triangle formed by the join line
+      fp.Offset(105, 20),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'arcTo with forceMoveTo=true starts a fresh contour',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..lineTo(10, 0)
+        ..arcTo(60, 0, 150, 90, 0, 3.141592653589793, true);
+    },
+    const [
+      fp.Offset(105, 70),
+      fp.Offset(105, 20),
+      fp.Offset(5, 10),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addArc negative sweep (counterclockwise, top half)',
+    (t) {
+      t
+        ..addArc(0, 0, 90, 90, 0, -3.141592653589793)
+        ..close();
+    },
+    const [
+      fp.Offset(45, 20),
+      fp.Offset(45, 70),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addArc quarter sweep from 45 degrees',
+    (t) {
+      t
+        ..addArc(0, 0, 90, 90, 0.7853981633974483, 1.5707963267948966)
+        ..close();
+    },
+    const [
+      fp.Offset(45, 80), // near bottom apex inside the segment
+      fp.Offset(45, 45), // center — outside (chord cuts it off)
+      fp.Offset(20, 70),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addArc sweep beyond 2 pi clamps to a full oval',
+    (t) {
+      t
+        ..addArc(0, 0, 90, 90, 0, 9.42477796076938)
+        ..close();
+    },
+    const [
+      fp.Offset(45, 45),
+      fp.Offset(70, 70), // r≈35 < 45 inside
+      fp.Offset(80, 80), // r≈49 > 45 outside
       ..._gridFar,
     ],
   ),

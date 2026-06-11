@@ -569,3 +569,34 @@ class AddRRectsUi500Benchmark extends FastPathBenchmark {
     sink ^= _path.fillType.index;
   }
 }
+
+/// Mirrors `AddArcs500Benchmark`. 500 `ui.Path.addArc` calls per run on
+/// a reused path.
+class AddArcsUi500Benchmark extends FastPathBenchmark {
+  AddArcsUi500Benchmark() : super('add_arcs_ui_500');
+
+  late ui.Path _path;
+  late List<ui.Rect> _ovals;
+  late List<double> _sweeps;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+    _ovals = <ui.Rect>[
+      for (var i = 0; i < 500; i++)
+        ui.Rect.fromLTWH((i % 25) * 8.0, (i ~/ 25) * 8.0, 6.0, 6.0),
+    ];
+    _sweeps = <double>[
+      for (var i = 0; i < 500; i++) (math.pi / 2) * (1 + i % 4),
+    ];
+  }
+
+  @override
+  void run() {
+    _path.reset();
+    for (var i = 0; i < _ovals.length; i++) {
+      _path.addArc(_ovals[i], (i % 8) * math.pi / 4, _sweeps[i]);
+    }
+    sink ^= _path.fillType.index;
+  }
+}
