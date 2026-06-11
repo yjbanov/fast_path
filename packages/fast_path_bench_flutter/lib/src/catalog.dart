@@ -108,6 +108,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: AddRectsUi500Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Add ovals',
+        description:
+            '500 addOval calls per run on a reused builder. Each oval '
+            'is four conic verbs.',
+        createFp: fp.AddOvals500Benchmark.new,
+        createUi: AddOvalsUi500Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Build with quads',
         description:
             'Per-frame reuse, 500 quadraticBezierTo segments. Stresses '

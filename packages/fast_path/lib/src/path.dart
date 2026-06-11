@@ -304,6 +304,34 @@ final class PathBuilder {
     close();
   }
 
+  /// The conic weight that turns a quarter ellipse into an exact conic
+  /// section: cos(45°) = √2/2.
+  static const double _quarterArcWeight = 0.707106781186547524;
+
+  /// Adds a closed oval contour inscribed in [oval]: four quarter-ellipse
+  /// conics (weight √2/2) wound clockwise from the right edge's midpoint,
+  /// with control points at the corners of [oval]. The control points
+  /// land in the loose `getBounds`, so the bounds of an oval path equal
+  /// [oval] itself — matching Skia's representation.
+  ///
+  /// Behaves identically to `Path.addOval` in `dart:ui`, except that this
+  /// method lives on [PathBuilder] rather than `Path`.
+  void addOval(Rect oval) {
+    final l = oval.left;
+    final t = oval.top;
+    final r = oval.right;
+    final b = oval.bottom;
+    final cx = (l + r) / 2;
+    final cy = (t + b) / 2;
+    const w = _quarterArcWeight;
+    moveTo(r, cy);
+    conicTo(r, b, cx, b, w);
+    conicTo(l, b, l, cy, w);
+    conicTo(l, t, cx, t, w);
+    conicTo(r, t, r, cy, w);
+    close();
+  }
+
   /// Closes the current contour by connecting the current point back to the
   /// most recent `moveTo`.
   ///

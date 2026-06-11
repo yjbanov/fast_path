@@ -51,6 +51,7 @@ abstract class PathTarget {
   void relativeConicTo(double dx1, double dy1, double dx2, double dy2, double w);
   void addPolygon(List<(double, double)> points, bool close);
   void addRect(double l, double t, double r, double b);
+  void addOval(double l, double t, double r, double b);
   void close();
   set evenOdd(bool value);
 }
@@ -130,6 +131,10 @@ class _FpTarget implements PathTarget {
   @override
   void addRect(double l, double t, double r, double b) =>
       _b.addRect(fp.Rect.fromLTRB(l, t, r, b));
+
+  @override
+  void addOval(double l, double t, double r, double b) =>
+      _b.addOval(fp.Rect.fromLTRB(l, t, r, b));
 
   @override
   void close() => _b.close();
@@ -214,6 +219,10 @@ class _UiTarget implements PathTarget {
   @override
   void addRect(double l, double t, double r, double b) =>
       _p.addRect(ui.Rect.fromLTRB(l, t, r, b));
+
+  @override
+  void addOval(double l, double t, double r, double b) =>
+      _p.addOval(ui.Rect.fromLTRB(l, t, r, b));
 
   @override
   void close() => _p.close();
@@ -1048,6 +1057,47 @@ final List<_Case> _cases = <_Case>[
     const [
       fp.Offset(5, 5),
       fp.Offset(2, 15),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addOval circle — contains discriminates by radius',
+    (t) => t.addOval(0, 0, 90, 90),
+    const [
+      fp.Offset(45, 45), // center
+      fp.Offset(70, 70), // r ≈ 35.4 < 45 — inside
+      fp.Offset(78, 78), // r ≈ 46.7 > 45 — outside, inside bbox corner
+      fp.Offset(86, 45), // near +x apex, inside
+      fp.Offset(5, 5), // bbox corner, far outside circle
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addOval ellipse with distinct radii',
+    (t) => t.addOval(0, 0, 180, 50),
+    const [
+      fp.Offset(90, 25),
+      fp.Offset(170, 25),
+      fp.Offset(90, 45),
+      fp.Offset(160, 42), // outside ellipse, inside bbox
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addOval nested under evenOdd forms an annulus',
+    (t) {
+      t
+        ..evenOdd = true
+        ..addOval(0, 0, 90, 90)
+        ..addOval(20, 20, 70, 70);
+    },
+    const [
+      fp.Offset(45, 45), // hole
+      fp.Offset(45, 10), // ring
+      fp.Offset(45, 30), // hole again (inside inner oval)
       ..._gridFar,
     ],
   ),

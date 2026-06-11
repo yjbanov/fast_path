@@ -8,6 +8,12 @@
   clockwise from the top-left corner. Parity cases include nested
   same-direction rects (winding direction check) under both fill rules.
   `add_rects_500` benchmark pair added.
+- `PathBuilder.addOval(Rect)`: four quarter-ellipse conics (weight
+  √2/2) wound clockwise from the right edge midpoint, control points at
+  the rect corners so loose bounds equal the oval rect — same
+  representation as Skia. Parity cases discriminate circle membership
+  by radius (catching any polygonal approximation) and verify the
+  evenOdd annulus. `add_ovals_500` benchmark pair added.
 
 
 - M1 complete (all curve verbs) — `PathBuilder.quadraticBezierTo`,
