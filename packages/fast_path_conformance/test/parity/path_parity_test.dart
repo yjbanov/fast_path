@@ -31,6 +31,22 @@ abstract class PathTarget {
     double dx2,
     double dy2,
   );
+  void cubicTo(
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double x3,
+    double y3,
+  );
+  void relativeCubicTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+    double dx3,
+    double dy3,
+  );
   void addPolygon(List<(double, double)> points, bool close);
   void close();
   set evenOdd(bool value);
@@ -64,6 +80,28 @@ class _FpTarget implements PathTarget {
     double dy2,
   ) =>
       _b.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2);
+
+  @override
+  void cubicTo(
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double x3,
+    double y3,
+  ) =>
+      _b.cubicTo(x1, y1, x2, y2, x3, y3);
+
+  @override
+  void relativeCubicTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+    double dx3,
+    double dy3,
+  ) =>
+      _b.relativeCubicTo(dx1, dy1, dx2, dy2, dx3, dy3);
 
   @override
   void addPolygon(List<(double, double)> points, bool close) =>
@@ -108,6 +146,28 @@ class _UiTarget implements PathTarget {
     double dy2,
   ) =>
       _p.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2);
+
+  @override
+  void cubicTo(
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double x3,
+    double y3,
+  ) =>
+      _p.cubicTo(x1, y1, x2, y2, x3, y3);
+
+  @override
+  void relativeCubicTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+    double dx3,
+    double dy3,
+  ) =>
+      _p.relativeCubicTo(dx1, dy1, dx2, dy2, dx3, dy3);
 
   @override
   void addPolygon(List<(double, double)> points, bool close) =>
@@ -631,6 +691,131 @@ final List<_Case> _cases = <_Case>[
       fp.Offset(50, 15),
       fp.Offset(50, 5),
       fp.Offset(50, 30),
+      ..._gridFar,
+    ],
+  ),
+
+  // M1 — Cubics.
+
+  _Case(
+    'single cubic arc with both controls above the chord',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..cubicTo(30, 100, 70, 100, 100, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 30),
+      fp.Offset(30, 20),
+      fp.Offset(70, 20),
+      fp.Offset(50, -5),
+      fp.Offset(50, 80), // above apex (apex y ≈ 75)
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'S-curve cubic (controls on opposite sides of the chord)',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..cubicTo(40, 80, 60, -80, 100, 0)
+        ..lineTo(100, 50)
+        ..lineTo(0, 50)
+        ..close();
+    },
+    const [
+      // Clearly above the cubic (in the closed rectangle).
+      fp.Offset(20, 40),
+      fp.Offset(80, 40),
+      // Outside the bounding box.
+      fp.Offset(-5, 25),
+      fp.Offset(105, 25),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'mixed line + cubic — rounded triangle',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..lineTo(100, 0)
+        ..cubicTo(130, 30, 90, 80, 50, 100)
+        ..lineTo(0, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 20),
+      fp.Offset(70, 40),
+      fp.Offset(50, -5),
+      fp.Offset(110, 70),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'cubic with collinear controls (degenerate, line-like)',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..lineTo(0, 50)
+        ..cubicTo(33, 33, 66, 16, 100, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(10, 5),
+      fp.Offset(30, 5),
+      fp.Offset(70, 30), // above the cubic
+      fp.Offset(20, 45),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'relativeCubicTo accumulates from current point',
+    (t) {
+      t
+        ..moveTo(10, 10)
+        ..relativeCubicTo(20, 90, 60, 90, 90, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(60, 40),
+      fp.Offset(60, 5),
+      fp.Offset(60, 90),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'cubic without prior moveTo starts at the origin',
+    (t) => t
+      ..cubicTo(30, 100, 70, 100, 100, 0)
+      ..close(),
+    const [
+      fp.Offset(50, 30),
+      fp.Offset(50, -5),
+      fp.Offset(50, 80),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'evenOdd fill on a self-overlapping cubic path',
+    (t) {
+      t
+        ..evenOdd = true
+        ..moveTo(0, 0)
+        ..cubicTo(40, 100, 60, 100, 100, 0)
+        ..cubicTo(60, 50, 40, 50, 0, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 60),
+      fp.Offset(50, 20),
+      fp.Offset(50, 5),
       ..._gridFar,
     ],
   ),

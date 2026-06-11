@@ -4,24 +4,29 @@
 
 ### Added
 
-- M1 partial — `PathBuilder.quadraticBezierTo(x1, y1, x2, y2)` and
-  `PathBuilder.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2)`. Match
+- M1 partial — `PathBuilder.quadraticBezierTo(x1, y1, x2, y2)`,
+  `PathBuilder.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2)`,
+  `PathBuilder.cubicTo(x1, y1, x2, y2, x3, y3)`, and
+  `PathBuilder.relativeCubicTo(dx1, dy1, dx2, dy2, dx3, dy3)`. Match
   `dart:ui.Path` semantics including implicit-`moveTo` and post-`close`
   fresh-contour behavior.
-- `Path.contains` learned the `verbQuad` case via analytic
-  quadratic-crossing solver. For each quad, solve `y(t) = py` directly
-  for `t ∈ [0, 1]`, compute `x(t)`, count by sign of `y'(t)`. Half-open
-  endpoint tie-break matches the line-segment convention so vertices
-  on the ray are counted exactly once; tangent crossings (`y' = 0`)
-  contribute nothing. Records `(winding, crossingCount)` so both
-  nonZero and evenOdd fill rules remain accurate. Replaced an initial
-  recursive-flattening implementation; see "Changed" below.
-- 7 new quad parity cases in `fast_path_conformance/test/parity/`.
-  All pass against `dart:ui.Path`.
-- `build_quads_500` (per-frame builder reuse, 500 quads) and
-  `contains_quads_grid_1024` (1024 contains queries on a 64-quad
-  ring). Both have `dart:ui` counterparts; the catalog wires them as
-  `PairedBenchmark` entries.
+- `Path.contains` learned the `verbQuad` and `verbCubic` cases via
+  analytic root solvers. Quad solves a quadratic in `t` directly. Cubic
+  uses depression + Cardano (one real root) or trigonometric form
+  (three real roots), with explicit fallbacks for the quadratic /
+  linear / constant degenerate cases when the leading coefficient
+  vanishes. For each root `t ∈ [0, 1]` the same per-root helper applies
+  the half-open endpoint tie-break and `x(t) > px` filter; tangent
+  crossings (`y'(t) = 0`) contribute nothing. Records
+  `(winding, crossingCount)` so both nonZero and evenOdd fill rules
+  remain accurate across curve segments.
+- 7 new quad and 7 new cubic parity cases in
+  `fast_path_conformance/test/parity/`. All pass against `dart:ui.Path`.
+- `build_quads_500` and `build_cubics_500` (per-frame builder reuse
+  with 500 curve segments each), `contains_quads_grid_1024` and
+  `contains_cubics_grid_1024` (1024 contains queries on a 64-quad and
+  a 32-cubic ring respectively). All have `dart:ui` counterparts; the
+  catalog wires them as `PairedBenchmark` entries.
 
 ### Changed
 

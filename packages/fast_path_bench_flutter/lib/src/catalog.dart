@@ -108,6 +108,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: BuildQuadsUi500Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Build with cubics',
+        description:
+            'Per-frame reuse, 500 cubicTo segments. Three points per '
+            'verb (two controls + endpoint).',
+        createFp: fp.BuildCubics500Benchmark.new,
+        createUi: BuildCubicsUi500Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Hit-test grid',
         description:
             '1024 contains() queries against a 100-vertex star polygon.',
@@ -118,9 +126,17 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         displayName: 'Hit-test grid (quads)',
         description:
             '1024 contains() queries against a 64-quad wavy ring. Tests '
-            'the adaptive-flattening hot path.',
+            'the analytic quadratic-crossings hot path.',
         createFp: fp.ContainsQuadsGrid1024Benchmark.new,
         createUi: ContainsQuadsGridUi1024Benchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Hit-test grid (cubics)',
+        description:
+            '1024 contains() queries against a 32-cubic wavy ring. '
+            'Stresses the Cardano / trig cubic-crossings solver.',
+        createFp: fp.ContainsCubicsGrid1024Benchmark.new,
+        createUi: ContainsCubicsGridUi1024Benchmark.new,
       ),
       PairedBenchmark(
         displayName: 'getBounds — cached',

@@ -178,6 +178,50 @@ final class PathBuilder {
     quadraticBezierTo(cx + dx1, cy + dy1, cx + dx2, cy + dy2);
   }
 
+  /// Adds a cubic Bézier segment from the current point with control
+  /// points `(x1, y1)` and `(x2, y2)` ending at `(x3, y3)`.
+  ///
+  /// Implicit-moveTo rules from [lineTo] apply.
+  ///
+  /// Behaves identically to `Path.cubicTo` in `dart:ui`, except that this
+  /// method lives on [PathBuilder] rather than `Path`.
+  void cubicTo(
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double x3,
+    double y3,
+  ) {
+    _injectMoveToIfNeeded();
+    _appendVerb(verbCubic);
+    _appendPoint(x1, y1);
+    _appendPoint(x2, y2);
+    _appendPoint(x3, y3);
+  }
+
+  /// Cubic Bézier from the current point with control points
+  /// current + `(dx1, dy1)` and current + `(dx2, dy2)` ending at current +
+  /// `(dx3, dy3)`.
+  ///
+  /// Behaves identically to `Path.relativeCubicTo` in `dart:ui`, except
+  /// that this method lives on [PathBuilder] rather than `Path`.
+  void relativeCubicTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+    double dx3,
+    double dy3,
+  ) {
+    final (cx, cy) = _currentPoint();
+    cubicTo(
+      cx + dx1, cy + dy1,
+      cx + dx2, cy + dy2,
+      cx + dx3, cy + dy3,
+    );
+  }
+
   /// Adds a contour consisting of straight line segments connecting [points]
   /// in order. If [close] is true, the contour is closed back to
   /// `points.first`.
@@ -493,6 +537,21 @@ final class Path {
           curX = ex;
           curY = ey;
           pointIdx += 4;
+        case verbCubic:
+          final c1x = _points[pointIdx];
+          final c1y = _points[pointIdx + 1];
+          final c2x = _points[pointIdx + 2];
+          final c2y = _points[pointIdx + 3];
+          final ex = _points[pointIdx + 4];
+          final ey = _points[pointIdx + 5];
+          final (cWinding, cCrossings) = _cubicCrossingsForRay(
+            curX, curY, c1x, c1y, c2x, c2y, ex, ey, px, py,
+          );
+          winding += cWinding;
+          crossings += cCrossings;
+          curX = ex;
+          curY = ey;
+          pointIdx += 6;
         case verbClose:
           final delta =
               _edgeWindingDelta(curX, curY, startX, startY, px, py);
@@ -504,7 +563,7 @@ final class Path {
           curY = startY;
           contourOpen = false;
         default:
-          // M1 still owes cubic and conic. They land in follow-up commits.
+          // M1 still owes conic. It lands in a follow-up commit.
           assert(false, 'Unsupported verb in M1: $verb');
       }
     }
@@ -673,6 +732,247 @@ final class Path {
     }
 
     return yPrime > 0 ? (1, 1) : (-1, 1);
+  }
+
+  /// Analytic crossings of a single cubic Bézier against the horizontal
+  /// ray from `(px, py)` to `+x`. Mirrors [_quadCrossingsForRay] in
+  /// shape: returns `(windingDelta, crossingCount)`.
+  ///
+  /// Setting `y(t) = py` on a cubic Bézier yields a cubic in `t`:
+  ///
+  ///     A·t³ + B·t² + C·t + D = 0
+  ///     A = -y0 + 3y1 - 3y2 + y3
+  ///     B = 3(y0 - 2y1 + y2)
+  ///     C = 3(y1 - y0)
+  ///     D = y0 - py
+  ///
+  /// Solved via the standard depression + Cardano / trig pipeline:
+  ///
+  /// 1. Normalize by `A`, substitute `t = u - B/(3A)` to drop the t²
+  ///    term, leaving a depressed cubic `u³ + P·u + Q = 0`.
+  /// 2. Pick the branch by discriminant `Δ = (Q/2)² + (P/3)³`:
+  ///    - `Δ > 0`: one real root (Cardano).
+  ///    - `Δ < 0`: three distinct real roots (trigonometric form).
+  ///    - `Δ = 0`: double + simple root (or triple). Tangent guard
+  ///      inside the per-root helper neutralizes the double root.
+  /// 3. For each root `t` in `[0, 1]`, hand off to
+  ///    [_cubicRootContribution] for the half-open endpoint tie-break
+  ///    and `x(t) > px` check.
+  ///
+  /// Degenerate cases handled first: when `A = 0` the equation drops to
+  /// a quadratic in `t`; when `B` is also zero it's linear; when `C` is
+  /// also zero it's a constant (no crossings unless `D = 0`, in which
+  /// case the curve lies on the ray for all `t` — treated as zero
+  /// contribution).
+  ///
+  /// Note that `x(t)` is still a cubic regardless of which y-branch
+  /// applies, so the quadratic-fallback can't simply delegate to
+  /// [_quadCrossingsForRay] — it needs to evaluate the cubic `x(t)`.
+  static (int, int) _cubicCrossingsForRay(
+    double x0,
+    double y0,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double x3,
+    double y3,
+    double px,
+    double py,
+  ) {
+    final A = -y0 + 3 * y1 - 3 * y2 + y3;
+    final B = 3 * (y0 - 2 * y1 + y2);
+    final C = 3 * (y1 - y0);
+    final D = y0 - py;
+
+    var winding = 0;
+    var crossings = 0;
+
+    // Degenerate: A = 0 → cubic in t collapses to quadratic.
+    if (A == 0) {
+      if (B == 0) {
+        if (C == 0) {
+          // Constant in t: y(t) - py = D for all t. No crossings.
+          return (0, 0);
+        }
+        final t = -D / C;
+        if (t >= 0 && t <= 1) {
+          final (w, c) =
+              _cubicRootContribution(t, A, B, C, x0, x1, x2, x3, px);
+          winding += w;
+          crossings += c;
+        }
+        return (winding, crossings);
+      }
+      final disc = C * C - 4 * B * D;
+      if (disc < 0) {
+        return (0, 0);
+      }
+      final sqrtDisc = math.sqrt(disc);
+      final twoB = 2 * B;
+      final t1 = (-C - sqrtDisc) / twoB;
+      if (t1 >= 0 && t1 <= 1) {
+        final (w, c) =
+            _cubicRootContribution(t1, A, B, C, x0, x1, x2, x3, px);
+        winding += w;
+        crossings += c;
+      }
+      if (disc > 0) {
+        final t2 = (-C + sqrtDisc) / twoB;
+        if (t2 >= 0 && t2 <= 1) {
+          final (w, c) =
+              _cubicRootContribution(t2, A, B, C, x0, x1, x2, x3, px);
+          winding += w;
+          crossings += c;
+        }
+      }
+      return (winding, crossings);
+    }
+
+    // True cubic. Depress: u³ + P·u + Q = 0 with t = u - p/3.
+    final p = B / A;
+    final q = C / A;
+    final r = D / A;
+    final pOver3 = p / 3;
+    final P = q - p * p / 3;
+    final Q = 2 * p * p * p / 27 - p * q / 3 + r;
+
+    final halfQ = Q / 2;
+    final p3 = P / 3;
+    final discriminant = halfQ * halfQ + p3 * p3 * p3;
+
+    if (discriminant > 0) {
+      // One real root via Cardano.
+      final sqrtD = math.sqrt(discriminant);
+      final u = _cbrt(-halfQ + sqrtD) + _cbrt(-halfQ - sqrtD);
+      final t = u - pOver3;
+      if (t >= 0 && t <= 1) {
+        final (w, c) = _cubicRootContribution(t, A, B, C, x0, x1, x2, x3, px);
+        winding += w;
+        crossings += c;
+      }
+    } else if (discriminant < 0) {
+      // Three distinct real roots via the trigonometric form. P must be
+      // negative (otherwise discriminant would be ≥ 0), so `-P/3` and
+      // `-(P/3)³` are positive; the square roots and the acos argument
+      // are well-defined.
+      final m = 2 * math.sqrt(-p3);
+      // 3Q / (P · m) can drift slightly outside [-1, 1] due to FP
+      // rounding even when it's mathematically in range; clamp before
+      // handing it to acos.
+      final cosArg = (3 * Q) / (P * m);
+      final clamped = cosArg < -1 ? -1.0 : (cosArg > 1 ? 1.0 : cosArg);
+      final theta = math.acos(clamped) / 3;
+      const twoPiOver3 = 2 * math.pi / 3;
+
+      final u0 = m * math.cos(theta);
+      final u1 = m * math.cos(theta - twoPiOver3);
+      final u2 = m * math.cos(theta + twoPiOver3);
+
+      final t0 = u0 - pOver3;
+      if (t0 >= 0 && t0 <= 1) {
+        final (w, c) = _cubicRootContribution(t0, A, B, C, x0, x1, x2, x3, px);
+        winding += w;
+        crossings += c;
+      }
+      final t1 = u1 - pOver3;
+      if (t1 >= 0 && t1 <= 1) {
+        final (w, c) = _cubicRootContribution(t1, A, B, C, x0, x1, x2, x3, px);
+        winding += w;
+        crossings += c;
+      }
+      final t2 = u2 - pOver3;
+      if (t2 >= 0 && t2 <= 1) {
+        final (w, c) = _cubicRootContribution(t2, A, B, C, x0, x1, x2, x3, px);
+        winding += w;
+        crossings += c;
+      }
+    } else {
+      // discriminant == 0: double + simple root (or triple if Q = 0).
+      // The tangent guard inside _cubicRootContribution suppresses the
+      // double root since y'(t) = 0 there; we don't need to special-
+      // case it.
+      if (Q == 0) {
+        // Triple root at u = 0 → t = -p/3.
+        final t = -pOver3;
+        if (t >= 0 && t <= 1) {
+          final (w, c) =
+              _cubicRootContribution(t, A, B, C, x0, x1, x2, x3, px);
+          winding += w;
+          crossings += c;
+        }
+      } else {
+        final cbrt = _cbrt(-halfQ);
+        final tSingle = 2 * cbrt - pOver3;
+        final tDouble = -cbrt - pOver3;
+        if (tSingle >= 0 && tSingle <= 1) {
+          final (w, c) = _cubicRootContribution(
+            tSingle, A, B, C, x0, x1, x2, x3, px,
+          );
+          winding += w;
+          crossings += c;
+        }
+        if (tDouble >= 0 && tDouble <= 1) {
+          final (w, c) = _cubicRootContribution(
+            tDouble, A, B, C, x0, x1, x2, x3, px,
+          );
+          winding += w;
+          crossings += c;
+        }
+      }
+    }
+
+    return (winding, crossings);
+  }
+
+  /// Contribution of a single root `t` of `y(t) = py` on a cubic Bézier
+  /// to the ray-crossing count. Same shape and tie-break rules as
+  /// [_quadRootContribution]; the only differences are the
+  /// `y'(t) = 3A·t² + 2B·t + C` formula and the cubic `x(t)` evaluation.
+  static (int, int) _cubicRootContribution(
+    double t,
+    double A,
+    double B,
+    double C,
+    double x0,
+    double x1,
+    double x2,
+    double x3,
+    double px,
+  ) {
+    final yPrime = 3 * A * t * t + 2 * B * t + C;
+    if (yPrime == 0) {
+      return (0, 0); // tangent crossing
+    }
+    if (t == 0 && yPrime < 0) {
+      return (0, 0);
+    }
+    if (t == 1 && yPrime > 0) {
+      return (0, 0);
+    }
+
+    final omt = 1 - t;
+    final omt2 = omt * omt;
+    final t2 = t * t;
+    final x = omt2 * omt * x0 +
+        3 * omt2 * t * x1 +
+        3 * omt * t2 * x2 +
+        t2 * t * x3;
+    if (x <= px) {
+      return (0, 0);
+    }
+
+    return yPrime > 0 ? (1, 1) : (-1, 1);
+  }
+
+  /// Real-valued cube root, signed. `dart:math` only exposes `pow` which
+  /// returns NaN for negative bases at non-integer exponents, so we
+  /// reflect across zero by hand.
+  static double _cbrt(double x) {
+    if (x < 0) {
+      return -math.pow(-x, 1 / 3).toDouble();
+    }
+    return math.pow(x, 1 / 3).toDouble();
   }
 
   @override

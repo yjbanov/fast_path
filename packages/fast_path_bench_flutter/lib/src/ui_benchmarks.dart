@@ -266,6 +266,93 @@ class BuildQuadsUi500Benchmark extends FastPathBenchmark {
   }
 }
 
+/// Mirrors `BuildCubics500Benchmark`. 500-cubic construction on a reused
+/// `ui.Path`.
+class BuildCubicsUi500Benchmark extends FastPathBenchmark {
+  BuildCubicsUi500Benchmark() : super('build_cubics_ui_500');
+
+  late ui.Path _path;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+  }
+
+  @override
+  void run() {
+    _path
+      ..reset()
+      ..moveTo(0, 0);
+    for (var i = 0; i < 500; i++) {
+      final c1x = (i * 2.7) % 200;
+      final c1y = (i * 1.3) % 100;
+      final c2x = (i * 3.1) % 180;
+      final c2y = (i * 1.9) % 90;
+      final ex = (i + 1) * 1.0;
+      final ey = ((i + 1) * 1.7) % 80;
+      _path.cubicTo(c1x, c1y, c2x, c2y, ex, ey);
+    }
+    _path.close();
+    sink ^= _path.fillType.index;
+  }
+}
+
+/// Mirrors `ContainsCubicsGrid1024Benchmark`. Same 32-cubic ring built
+/// once in [setup]; 1024 contains queries per run.
+class ContainsCubicsGridUi1024Benchmark extends FastPathBenchmark {
+  ContainsCubicsGridUi1024Benchmark() : super('contains_cubics_grid_ui_1024');
+
+  late ui.Path _path;
+  late List<ui.Offset> _samples;
+
+  @override
+  int get opsPerRun => _samples.length;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+    const segs = 32;
+    const r = 40.0;
+    const cx = 50.0;
+    const cy = 50.0;
+    _path.moveTo(cx + r, cy);
+    for (var i = 0; i < segs; i++) {
+      final a0 = i * 2 * math.pi / segs;
+      final a1 = (i + 1) * 2 * math.pi / segs;
+      final r1 = i.isEven ? r * 0.55 : r * 1.25;
+      final r2 = i.isEven ? r * 1.25 : r * 0.55;
+      final t1 = a0 + (a1 - a0) * 0.33;
+      final t2 = a0 + (a1 - a0) * 0.67;
+      _path.cubicTo(
+        cx + r1 * math.cos(t1),
+        cy + r1 * math.sin(t1),
+        cx + r2 * math.cos(t2),
+        cy + r2 * math.sin(t2),
+        cx + r * math.cos(a1),
+        cy + r * math.sin(a1),
+      );
+    }
+    _path.close();
+
+    _samples = <ui.Offset>[
+      for (var ix = 0; ix < 32; ix++)
+        for (var iy = 0; iy < 32; iy++)
+          ui.Offset(ix * 4.0 - 15.0, iy * 4.0 - 15.0),
+    ];
+  }
+
+  @override
+  void run() {
+    var hits = 0;
+    for (var i = 0; i < _samples.length; i++) {
+      if (_path.contains(_samples[i])) {
+        hits++;
+      }
+    }
+    sink ^= hits;
+  }
+}
+
 /// Mirrors `ContainsQuadsGrid1024Benchmark`. Same 64-quad wavy ring built
 /// once in [setup]; 1024 contains queries per run.
 class ContainsQuadsGridUi1024Benchmark extends FastPathBenchmark {
