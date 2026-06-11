@@ -485,3 +485,30 @@ class ContainsConicsGridUi1024Benchmark extends FastPathBenchmark {
     sink ^= hits;
   }
 }
+
+/// Mirrors `AddRects500Benchmark`. 500 `ui.Path.addRect` calls per run
+/// on a reused path.
+class AddRectsUi500Benchmark extends FastPathBenchmark {
+  AddRectsUi500Benchmark() : super('add_rects_ui_500');
+
+  late ui.Path _path;
+  late List<ui.Rect> _rects;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+    _rects = <ui.Rect>[
+      for (var i = 0; i < 500; i++)
+        ui.Rect.fromLTWH((i % 25) * 8.0, (i ~/ 25) * 8.0, 6.0, 6.0),
+    ];
+  }
+
+  @override
+  void run() {
+    _path.reset();
+    for (var i = 0; i < _rects.length; i++) {
+      _path.addRect(_rects[i]);
+    }
+    sink ^= _path.fillType.index;
+  }
+}

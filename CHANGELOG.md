@@ -4,6 +4,12 @@
 
 ### Added
 
+- M2 begins — `PathBuilder.addRect(Rect)`: closed rectangular contour,
+  clockwise from the top-left corner. Parity cases include nested
+  same-direction rects (winding direction check) under both fill rules.
+  `add_rects_500` benchmark pair added.
+
+
 - M1 complete (all curve verbs) — `PathBuilder.quadraticBezierTo`,
   `relativeQuadraticBezierTo`, `cubicTo`, `relativeCubicTo`, `conicTo`,
   and `relativeConicTo`. All match `dart:ui.Path` semantics including

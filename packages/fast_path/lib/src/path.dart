@@ -291,6 +291,19 @@ final class PathBuilder {
     }
   }
 
+  /// Adds a closed rectangular contour: clockwise from the top-left
+  /// corner of [rect].
+  ///
+  /// Behaves identically to `Path.addRect` in `dart:ui`, except that this
+  /// method lives on [PathBuilder] rather than `Path`.
+  void addRect(Rect rect) {
+    moveTo(rect.left, rect.top);
+    lineTo(rect.right, rect.top);
+    lineTo(rect.right, rect.bottom);
+    lineTo(rect.left, rect.bottom);
+    close();
+  }
+
   /// Closes the current contour by connecting the current point back to the
   /// most recent `moveTo`.
   ///

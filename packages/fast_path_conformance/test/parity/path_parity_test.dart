@@ -50,6 +50,7 @@ abstract class PathTarget {
   void conicTo(double x1, double y1, double x2, double y2, double w);
   void relativeConicTo(double dx1, double dy1, double dx2, double dy2, double w);
   void addPolygon(List<(double, double)> points, bool close);
+  void addRect(double l, double t, double r, double b);
   void close();
   set evenOdd(bool value);
 }
@@ -125,6 +126,10 @@ class _FpTarget implements PathTarget {
         points.map((p) => fp.Offset(p.$1, p.$2)).toList(growable: false),
         close,
       );
+
+  @override
+  void addRect(double l, double t, double r, double b) =>
+      _b.addRect(fp.Rect.fromLTRB(l, t, r, b));
 
   @override
   void close() => _b.close();
@@ -205,6 +210,10 @@ class _UiTarget implements PathTarget {
         points.map((p) => ui.Offset(p.$1, p.$2)).toList(growable: false),
         close,
       );
+
+  @override
+  void addRect(double l, double t, double r, double b) =>
+      _p.addRect(ui.Rect.fromLTRB(l, t, r, b));
 
   @override
   void close() => _p.close();
@@ -981,6 +990,64 @@ final List<_Case> _cases = <_Case>[
       fp.Offset(50, 95),
       fp.Offset(115, 40),
       fp.Offset(-5, 40),
+      ..._gridFar,
+    ],
+  ),
+
+  // M2 — Convenience builders.
+
+  _Case(
+    'addRect simple',
+    (t) => t.addRect(10, 20, 110, 70),
+    const [
+      fp.Offset(60, 45),
+      fp.Offset(5, 45),
+      fp.Offset(115, 45),
+      fp.Offset(60, 15),
+      fp.Offset(60, 75),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    // Catches a winding-direction mismatch: with evenOdd two nested
+    // rects form a frame regardless of direction, but with nonZero the
+    // result differs if directions differ. Test both fill types.
+    'addRect nested, nonZero (both filled if same direction)',
+    (t) => t
+      ..addRect(0, 0, 90, 90)
+      ..addRect(25, 25, 75, 75),
+    const [
+      fp.Offset(50, 50),
+      fp.Offset(10, 10),
+      fp.Offset(95, 50),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addRect nested, evenOdd (frame with hole)',
+    (t) {
+      t
+        ..evenOdd = true
+        ..addRect(0, 0, 90, 90)
+        ..addRect(25, 25, 75, 75);
+    },
+    const [
+      fp.Offset(50, 50), // hole
+      fp.Offset(10, 10), // frame
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addRect then lineTo opens a fresh contour at the rect start',
+    (t) => t
+      ..addRect(0, 0, 10, 10)
+      ..lineTo(5, 20),
+    const [
+      fp.Offset(5, 5),
+      fp.Offset(2, 15),
       ..._gridFar,
     ],
   ),

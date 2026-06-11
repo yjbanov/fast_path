@@ -100,6 +100,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: PathFromPathUi1kBenchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Add rects',
+        description:
+            '500 addRect calls per run on a reused builder. Models '
+            'grid/table cell painting.',
+        createFp: fp.AddRects500Benchmark.new,
+        createUi: AddRectsUi500Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Build with quads',
         description:
             'Per-frame reuse, 500 quadraticBezierTo segments. Stresses '
