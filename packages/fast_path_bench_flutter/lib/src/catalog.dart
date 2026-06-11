@@ -100,11 +100,27 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: PathFromPathUi1kBenchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Build with quads',
+        description:
+            'Per-frame reuse, 500 quadraticBezierTo segments. Stresses '
+            'the curve verb append + buffer growth path.',
+        createFp: fp.BuildQuads500Benchmark.new,
+        createUi: BuildQuadsUi500Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Hit-test grid',
         description:
             '1024 contains() queries against a 100-vertex star polygon.',
         createFp: fp.ContainsGrid1024Benchmark.new,
         createUi: ContainsGridUi1024Benchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Hit-test grid (quads)',
+        description:
+            '1024 contains() queries against a 64-quad wavy ring. Tests '
+            'the adaptive-flattening hot path.',
+        createFp: fp.ContainsQuadsGrid1024Benchmark.new,
+        createUi: ContainsQuadsGridUi1024Benchmark.new,
       ),
       PairedBenchmark(
         displayName: 'getBounds — cached',

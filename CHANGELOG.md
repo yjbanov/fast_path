@@ -4,6 +4,40 @@
 
 ### Added
 
+- M1 partial — `PathBuilder.quadraticBezierTo(x1, y1, x2, y2)` and
+  `PathBuilder.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2)`. Match
+  `dart:ui.Path` semantics including implicit-`moveTo` and post-`close`
+  fresh-contour behavior.
+- `Path.contains` learned the `verbQuad` case via recursive adaptive
+  subdivision (De Casteljau, perpendicular-distance flatness with a
+  squared tolerance of 0.0625 path-local units²). Each flattened leaf
+  returns to the existing line-segment `_edgeWindingDelta`. Records
+  (winding, crossingCount) so both nonZero and evenOdd fill rules
+  remain accurate across curve segments.
+- 7 new quad parity cases in `fast_path_conformance/test/parity/`.
+  All pass against `dart:ui.Path`.
+- `build_quads_500` (per-frame builder reuse, 500 quads) and
+  `contains_quads_grid_1024` (1024 contains queries on a 64-quad
+  ring). Both have `dart:ui` counterparts; the catalog wires them as
+  `PairedBenchmark` entries.
+
+### Changed
+
+- `Path.getBounds` semantics clarified in the implementation comment:
+  it returns **loose** bounds (bbox of every stored point, including
+  off-curve control points). This matches `dart:ui.Path.getBounds()`
+  and Skia's `SkPath::getBounds()`; the tight alternative
+  (`computeTightBounds`-style) is deferred to a future API addition
+  if a caller needs it.
+
+### Known limitations
+
+- `contains` on curve-heavy paths is significantly slower than
+  `dart:ui` (~5× on `contains_quads_grid`) because our recursive
+  flattening does O(N) work per query while Skia's native path likely
+  uses analytic quadratic-crossings. A future commit can swap in
+  analytic crossings to close the gap.
+
 - `packages/fast_path_bench/` — pure-Dart benchmark package backed by
   `package:benchmark_harness`. Each benchmark XORs its result into a sink
   that the runner observes after `measure()`, so JIT/AOT dead-code

@@ -24,6 +24,13 @@ abstract class PathTarget {
   void relativeMoveTo(double dx, double dy);
   void lineTo(double x, double y);
   void relativeLineTo(double dx, double dy);
+  void quadraticBezierTo(double x1, double y1, double x2, double y2);
+  void relativeQuadraticBezierTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+  );
   void addPolygon(List<(double, double)> points, bool close);
   void close();
   set evenOdd(bool value);
@@ -44,6 +51,19 @@ class _FpTarget implements PathTarget {
 
   @override
   void relativeLineTo(double dx, double dy) => _b.relativeLineTo(dx, dy);
+
+  @override
+  void quadraticBezierTo(double x1, double y1, double x2, double y2) =>
+      _b.quadraticBezierTo(x1, y1, x2, y2);
+
+  @override
+  void relativeQuadraticBezierTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+  ) =>
+      _b.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2);
 
   @override
   void addPolygon(List<(double, double)> points, bool close) =>
@@ -75,6 +95,19 @@ class _UiTarget implements PathTarget {
 
   @override
   void relativeLineTo(double dx, double dy) => _p.relativeLineTo(dx, dy);
+
+  @override
+  void quadraticBezierTo(double x1, double y1, double x2, double y2) =>
+      _p.quadraticBezierTo(x1, y1, x2, y2);
+
+  @override
+  void relativeQuadraticBezierTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+  ) =>
+      _p.relativeQuadraticBezierTo(dx1, dy1, dx2, dy2);
 
   @override
   void addPolygon(List<(double, double)> points, bool close) =>
@@ -464,6 +497,140 @@ final List<_Case> _cases = <_Case>[
     const [
       fp.Offset(7, 5),
       fp.Offset(11, 5),
+      ..._gridFar,
+    ],
+  ),
+
+  // M1 — Curves.
+
+  _Case(
+    'single quad arc — control above the chord',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..quadraticBezierTo(50, 100, 100, 0)
+        ..close();
+    },
+    const [
+      // Comfortably inside the arc.
+      fp.Offset(50, 20),
+      fp.Offset(30, 10),
+      fp.Offset(70, 10),
+      // Outside.
+      fp.Offset(50, -5),
+      fp.Offset(50, 60), // above the apex (apex y is 50)
+      fp.Offset(-5, 0),
+      fp.Offset(105, 0),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'two-quad leaf shape',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..quadraticBezierTo(50, 80, 100, 0)
+        ..quadraticBezierTo(50, -80, 0, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 10),
+      fp.Offset(50, -10),
+      fp.Offset(20, 0),
+      fp.Offset(80, 0),
+      fp.Offset(50, 50), // outside top lobe (apex y ~40)
+      fp.Offset(50, -50),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'mixed line + quad — rounded triangle',
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..lineTo(100, 0)
+        ..quadraticBezierTo(120, 50, 50, 100)
+        ..lineTo(0, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(50, 30),
+      fp.Offset(70, 20),
+      fp.Offset(80, 60),
+      fp.Offset(50, -5),
+      fp.Offset(105, 60),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'quad with control on the chord (degenerate, line-like)',
+    // Triangle (0,0), (0,50), (100,0). The quad's chord goes (0,50) →
+    // (100,0); control at (50,25) is the chord midpoint so the curve
+    // collapses to a straight line. Samples below stay well clear of
+    // that diagonal — chord eqn is y = 50 - x/2.
+    (t) {
+      t
+        ..moveTo(0, 0)
+        ..lineTo(0, 50)
+        ..quadraticBezierTo(50, 25, 100, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(10, 5), // clearly inside
+      fp.Offset(30, 5), // clearly inside
+      fp.Offset(70, 30), // clearly outside (above diagonal)
+      fp.Offset(20, 45), // clearly outside (above diagonal)
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'relativeQuadraticBezierTo accumulates from current point',
+    (t) {
+      t
+        ..moveTo(10, 10)
+        ..relativeQuadraticBezierTo(40, 100, 90, 0)
+        ..close();
+    },
+    const [
+      fp.Offset(60, 30),
+      fp.Offset(60, 5),
+      fp.Offset(60, 70),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'quad without prior moveTo starts at the origin',
+    (t) => t
+      ..quadraticBezierTo(50, 100, 100, 0)
+      ..close(),
+    const [
+      fp.Offset(50, 20),
+      fp.Offset(50, -5),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'evenOdd fill on a self-overlapping quad path',
+    (t) {
+      t
+        ..evenOdd = true
+        ..moveTo(0, 0)
+        ..quadraticBezierTo(50, 100, 100, 0)
+        ..quadraticBezierTo(50, 50, 0, 0)
+        ..close();
+    },
+    const [
+      // Region between the two arcs — sample a few points.
+      fp.Offset(50, 40),
+      fp.Offset(50, 15),
+      fp.Offset(50, 5),
+      fp.Offset(50, 30),
       ..._gridFar,
     ],
   ),

@@ -16,10 +16,12 @@ import 'src/bounds_cold.dart';
 import 'src/bounds_warm.dart';
 import 'src/build_polyline.dart';
 import 'src/build_polyline_cold.dart';
+import 'src/build_quads.dart';
 import 'src/builder_clone.dart';
 import 'src/builder_from_path.dart';
 import 'src/builder_snapshot.dart';
 import 'src/contains_grid.dart';
+import 'src/contains_quads.dart';
 import 'src/path_equality.dart';
 import 'src/path_from_path.dart';
 import 'src/relative_polyline.dart';
@@ -30,10 +32,12 @@ export 'src/bounds_cold.dart';
 export 'src/bounds_warm.dart';
 export 'src/build_polyline.dart';
 export 'src/build_polyline_cold.dart';
+export 'src/build_quads.dart';
 export 'src/builder_clone.dart';
 export 'src/builder_from_path.dart';
 export 'src/builder_snapshot.dart';
 export 'src/contains_grid.dart';
+export 'src/contains_quads.dart';
 export 'src/path_equality.dart';
 export 'src/path_from_path.dart';
 export 'src/relative_polyline.dart';
@@ -53,8 +57,10 @@ List<FastPathBenchmark> allBenchmarks() => <FastPathBenchmark>[
       AddPolygon1kBenchmark(),
       RelativePolyline1kBenchmark(),
       PathFromPath1kBenchmark(),
+      BuildQuads500Benchmark(),
       // Queries.
       ContainsGrid1024Benchmark(),
+      ContainsQuadsGrid1024Benchmark(),
       BoundsWarm1kBenchmark(),
       BoundsCold1kBenchmark(),
       // Conversions (fp-only).

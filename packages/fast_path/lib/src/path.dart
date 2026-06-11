@@ -148,6 +148,35 @@ final class PathBuilder {
     lineTo(cx + dx, cy + dy);
   }
 
+  /// Adds a quadratic Bézier segment from the current point with control
+  /// point `(x1, y1)` ending at `(x2, y2)`.
+  ///
+  /// Implicit-moveTo rules from [lineTo] apply.
+  ///
+  /// Behaves identically to `Path.quadraticBezierTo` in `dart:ui`, except
+  /// that this method lives on [PathBuilder] rather than `Path`.
+  void quadraticBezierTo(double x1, double y1, double x2, double y2) {
+    _injectMoveToIfNeeded();
+    _appendVerb(verbQuad);
+    _appendPoint(x1, y1);
+    _appendPoint(x2, y2);
+  }
+
+  /// Quadratic Bézier from the current point with control point
+  /// current + `(dx1, dy1)` ending at current + `(dx2, dy2)`.
+  ///
+  /// Behaves identically to `Path.relativeQuadraticBezierTo` in `dart:ui`,
+  /// except that this method lives on [PathBuilder] rather than `Path`.
+  void relativeQuadraticBezierTo(
+    double dx1,
+    double dy1,
+    double dx2,
+    double dy2,
+  ) {
+    final (cx, cy) = _currentPoint();
+    quadraticBezierTo(cx + dx1, cy + dy1, cx + dx2, cy + dy2);
+  }
+
   /// Adds a contour consisting of straight line segments connecting [points]
   /// in order. If [close] is true, the contour is closed back to
   /// `points.first`.
@@ -369,6 +398,13 @@ final class Path {
     if (_points.isEmpty) {
       return Rect.zero;
     }
+    // Loose bounds: the bbox of every point in the path, including control
+    // points of any curves. Matches `dart:ui.Path.getBounds()` (and Skia's
+    // `SkPath::getBounds()`), which is documented as "may be larger than
+    // the actual area" precisely because it includes off-curve control
+    // points without solving for true curve extrema. A separate
+    // `computeTightBounds`-style method could be added later if a caller
+    // genuinely needs the tight value; for now matching dart:ui wins.
     var minX = _points[0];
     var maxX = _points[0];
     var minY = _points[1];
@@ -443,6 +479,19 @@ final class Path {
           curX = nx;
           curY = ny;
           pointIdx += 2;
+        case verbQuad:
+          final cx = _points[pointIdx];
+          final cy = _points[pointIdx + 1];
+          final ex = _points[pointIdx + 2];
+          final ey = _points[pointIdx + 3];
+          final (qWinding, qCrossings) = _quadCrossingsForRay(
+            curX, curY, cx, cy, ex, ey, px, py,
+          );
+          winding += qWinding;
+          crossings += qCrossings;
+          curX = ex;
+          curY = ey;
+          pointIdx += 4;
         case verbClose:
           final delta =
               _edgeWindingDelta(curX, curY, startX, startY, px, py);
@@ -454,8 +503,8 @@ final class Path {
           curY = startY;
           contourOpen = false;
         default:
-          // M0 has no curves yet. M1 will add quad/conic/cubic handling.
-          assert(false, 'Unsupported verb in M0: $verb');
+          // M1 still owes cubic and conic. They land in follow-up commits.
+          assert(false, 'Unsupported verb in M1: $verb');
       }
     }
 
@@ -503,6 +552,68 @@ final class Path {
       return 0;
     }
     return crossesDown ? 1 : -1;
+  }
+
+  /// Recursive adaptive flattening for a single quadratic Bézier, used by
+  /// [contains]. Returns the pair `(windingDelta, crossingCount)` —
+  /// winding for the nonZero rule (signed sum), crossing count for the
+  /// evenOdd rule (each line segment that crosses the ray counts once).
+  ///
+  /// A curve is treated as flat when the squared perpendicular distance
+  /// from its control point to its chord falls below
+  /// [_quadFlatnessSq]; the leaf is then handed off to
+  /// [_edgeWindingDelta] as a single line segment. Otherwise we subdivide
+  /// at `t = 0.5` via De Casteljau and recurse on both halves.
+  static const double _quadFlatness = 0.25;
+  static const double _quadFlatnessSq = _quadFlatness * _quadFlatness;
+
+  static (int, int) _quadCrossingsForRay(
+    double x0,
+    double y0,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double px,
+    double py,
+  ) {
+    final dx = x2 - x0;
+    final dy = y2 - y0;
+    final lenSq = dx * dx + dy * dy;
+    double distSq;
+    if (lenSq == 0) {
+      // Degenerate chord (P0 == P2): use the raw P1 → P0 distance, which
+      // bounds how far the curve can deviate.
+      final ex = x1 - x0;
+      final ey = y1 - y0;
+      distSq = ex * ex + ey * ey;
+    } else {
+      // Perpendicular distance² from (x1, y1) to the line through
+      // (x0, y0) and (x2, y2): (cross product)² / chord length².
+      final cross = (x1 - x0) * dy - (y1 - y0) * dx;
+      distSq = (cross * cross) / lenSq;
+    }
+
+    if (distSq <= _quadFlatnessSq) {
+      final delta = _edgeWindingDelta(x0, y0, x2, y2, px, py);
+      return (delta, delta != 0 ? 1 : 0);
+    }
+
+    // De Casteljau subdivision at t = 0.5.
+    final mx01 = (x0 + x1) * 0.5;
+    final my01 = (y0 + y1) * 0.5;
+    final mx12 = (x1 + x2) * 0.5;
+    final my12 = (y1 + y2) * 0.5;
+    final mx = (mx01 + mx12) * 0.5;
+    final my = (my01 + my12) * 0.5;
+
+    final (lw, lc) = _quadCrossingsForRay(
+      x0, y0, mx01, my01, mx, my, px, py,
+    );
+    final (rw, rc) = _quadCrossingsForRay(
+      mx, my, mx12, my12, x2, y2, px, py,
+    );
+    return (lw + rw, lc + rc);
   }
 
   @override
