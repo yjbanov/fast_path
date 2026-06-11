@@ -2,6 +2,7 @@
 // Use of this source code is governed by the BSD-3-Clause license in the
 // project root LICENSE file.
 
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:fast_path/fast_path.dart' as fp;
@@ -80,6 +81,18 @@ abstract class PathTarget {
     double startAngle,
     double sweepAngle,
   );
+  void addPath(
+    PathProgram sub,
+    double dx,
+    double dy, [
+    List<double>? matrix4,
+  ]);
+  void extendWithPath(
+    PathProgram sub,
+    double dx,
+    double dy, [
+    List<double>? matrix4,
+  ]);
   void close();
   set evenOdd(bool value);
 }
@@ -214,6 +227,34 @@ class _FpTarget implements PathTarget {
     double sweepAngle,
   ) =>
       _b.addArc(fp.Rect.fromLTRB(l, t, r, b), startAngle, sweepAngle);
+
+  @override
+  void addPath(
+    PathProgram sub,
+    double dx,
+    double dy, [
+    List<double>? matrix4,
+  ]) =>
+      _b.addPath(
+        _buildFp(sub),
+        fp.Offset(dx, dy),
+        matrix4:
+            matrix4 == null ? null : Float64List.fromList(matrix4),
+      );
+
+  @override
+  void extendWithPath(
+    PathProgram sub,
+    double dx,
+    double dy, [
+    List<double>? matrix4,
+  ]) =>
+      _b.extendWithPath(
+        _buildFp(sub),
+        fp.Offset(dx, dy),
+        matrix4:
+            matrix4 == null ? null : Float64List.fromList(matrix4),
+      );
 
   @override
   void close() => _b.close();
@@ -353,6 +394,34 @@ class _UiTarget implements PathTarget {
     double sweepAngle,
   ) =>
       _p.addArc(ui.Rect.fromLTRB(l, t, r, b), startAngle, sweepAngle);
+
+  @override
+  void addPath(
+    PathProgram sub,
+    double dx,
+    double dy, [
+    List<double>? matrix4,
+  ]) =>
+      _p.addPath(
+        _buildUi(sub),
+        ui.Offset(dx, dy),
+        matrix4:
+            matrix4 == null ? null : Float64List.fromList(matrix4),
+      );
+
+  @override
+  void extendWithPath(
+    PathProgram sub,
+    double dx,
+    double dy, [
+    List<double>? matrix4,
+  ]) =>
+      _p.extendWithPath(
+        _buildUi(sub),
+        ui.Offset(dx, dy),
+        matrix4:
+            matrix4 == null ? null : Float64List.fromList(matrix4),
+      );
 
   @override
   void close() => _p.close();
@@ -1364,6 +1433,83 @@ final List<_Case> _cases = <_Case>[
       fp.Offset(45, 45),
       fp.Offset(70, 70), // r≈35 < 45 inside
       fp.Offset(80, 80), // r≈49 > 45 outside
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addPath with offset',
+    (t) => t
+      ..addRect(0, 0, 20, 20)
+      ..addPath(
+        (s) => s
+          ..moveTo(0, 0)
+          ..lineTo(20, 0)
+          ..lineTo(10, 20)
+          ..close(),
+        50,
+        10,
+      ),
+    const [
+      fp.Offset(10, 10), // rect
+      fp.Offset(60, 15), // offset triangle
+      fp.Offset(35, 10), // gap
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addPath with rotation matrix + offset',
+    (t) => t.addPath(
+      (s) => s.addRect(0, 0, 20, 10),
+      80,
+      0,
+      const [
+        // 90° CW rotation, column-major.
+        0, 1, 0, 0, //
+        -1, 0, 0, 0, //
+        0, 0, 1, 0, //
+        0, 0, 0, 1,
+      ],
+    ),
+    const [
+      // Rect rotates to x' ∈ [-10, 0], y' ∈ [0, 20]; +80 → (70..80, 0..20).
+      fp.Offset(75, 10),
+      fp.Offset(65, 10),
+      fp.Offset(85, 10),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addPath with a curved (oval) source',
+    (t) => t.addPath((s) => s.addOval(0, 0, 90, 90), 5, 0),
+    const [
+      fp.Offset(50, 45),
+      fp.Offset(75, 70), // inside circle
+      fp.Offset(88, 83), // outside circle, inside bbox
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'extendWithPath joins the first contour',
+    (t) => t
+      ..moveTo(0, 0)
+      ..lineTo(30, 0)
+      ..extendWithPath(
+        (s) => s
+          ..moveTo(60, 30)
+          ..lineTo(90, 30)
+          ..lineTo(60, 60)
+          ..close(),
+        0,
+        0,
+      ),
+    const [
+      fp.Offset(70, 35), // triangle interior
+      fp.Offset(40, 12), // near the join line — inside the joined fill
+      fp.Offset(20, 40),
       ..._gridFar,
     ],
   ),

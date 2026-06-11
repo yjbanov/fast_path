@@ -13,6 +13,7 @@ library;
 import 'src/add_polygon.dart';
 import 'src/add_arcs.dart';
 import 'src/add_ovals.dart';
+import 'src/add_path.dart';
 import 'src/add_rects.dart';
 import 'src/add_rrects.dart';
 import 'src/benchmark_base.dart';
@@ -37,6 +38,7 @@ import 'src/relative_polyline.dart';
 export 'src/add_polygon.dart';
 export 'src/add_arcs.dart';
 export 'src/add_ovals.dart';
+export 'src/add_path.dart';
 export 'src/add_rects.dart';
 export 'src/add_rrects.dart';
 export 'src/benchmark_base.dart';
@@ -75,6 +77,8 @@ List<FastPathBenchmark> allBenchmarks() => <FastPathBenchmark>[
       AddOvals500Benchmark(),
       AddRRects500Benchmark(),
       AddArcs500Benchmark(),
+      AddPath100Benchmark(),
+      ExtendWithPath100Benchmark(),
       RelativePolyline1kBenchmark(),
       PathFromPath1kBenchmark(),
       BuildQuads500Benchmark(),

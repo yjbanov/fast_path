@@ -28,6 +28,15 @@
   fresh contour and joining with a line from the current point. Sweeps
   clamp to ±2π (verified against dart:ui with a 3π parity case).
   `add_arcs_500` benchmark pair added.
+- `PathBuilder.addPath(Path, Offset, {Float64List? matrix4})` and
+  `PathBuilder.extendWithPath(...)`: append another path's contours,
+  translated and optionally transformed by an affine matrix (the offset
+  applies after the matrix, matching the engine). `extendWithPath`
+  turns the source's first `moveTo` into a `lineTo` join when the
+  builder already has a contour. Conic weights pass through unchanged
+  (affine-invariant). Perspective matrices throw `UnimplementedError`
+  (documented; planned alongside M3's `Path.transform`). `add_path_100`
+  and `extend_with_path_100` benchmark pairs added.
 
 
 - M1 complete (all curve verbs) — `PathBuilder.quadraticBezierTo`,

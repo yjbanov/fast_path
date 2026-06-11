@@ -485,6 +485,130 @@ final class PathBuilder {
     arcTo(oval, startAngle, sweepAngle, true);
   }
 
+  /// Appends every contour of [path] to this builder, translated by
+  /// [offset] and (optionally) transformed by [matrix4], a column-major
+  /// 4×4 matrix. The offset is applied *after* the matrix, matching
+  /// `dart:ui` (the engine folds the offset into the matrix's
+  /// translation).
+  ///
+  /// Only affine matrices are supported; a matrix with perspective
+  /// components (`matrix4[3]`, `[7]` ≠ 0 or `[15]` ≠ 1) throws
+  /// [UnimplementedError]. Perspective requires re-classifying curve
+  /// segments and is deferred (see DESIGN.md §6.5 — planned with M3's
+  /// `Path.transform`).
+  ///
+  /// Behaves identically to `Path.addPath` in `dart:ui`, except that
+  /// this method lives on [PathBuilder] rather than `Path`.
+  void addPath(Path path, Offset offset, {Float64List? matrix4}) {
+    _appendPath(path, offset.dx, offset.dy, matrix4, extend: false);
+  }
+
+  /// Like [addPath], but the first contour of [path] is joined to the
+  /// current contour with a straight line instead of starting fresh —
+  /// the source's initial `moveTo` becomes a `lineTo` when this builder
+  /// already has a contour.
+  ///
+  /// Behaves identically to `Path.extendWithPath` in `dart:ui`, except
+  /// that this method lives on [PathBuilder] rather than `Path`.
+  void extendWithPath(Path path, Offset offset, {Float64List? matrix4}) {
+    _appendPath(path, offset.dx, offset.dy, matrix4, extend: true);
+  }
+
+  void _appendPath(
+    Path path,
+    double dx,
+    double dy,
+    Float64List? matrix4, {
+    required bool extend,
+  }) {
+    // Affine components. Column-major 4x4: x' = m0·x + m4·y + m12,
+    // y' = m1·x + m5·y + m13. The offset lands after the matrix.
+    var m0 = 1.0, m1 = 0.0, m4 = 0.0, m5 = 1.0, m12 = 0.0, m13 = 0.0;
+    if (matrix4 != null) {
+      if (matrix4[3] != 0 || matrix4[7] != 0 || matrix4[15] != 1.0) {
+        throw UnimplementedError(
+          'addPath/extendWithPath with a perspective matrix is not yet '
+          'supported; only affine matrices are. (Planned alongside M3\'s '
+          'Path.transform.)',
+        );
+      }
+      m0 = matrix4[0];
+      m1 = matrix4[1];
+      m4 = matrix4[4];
+      m5 = matrix4[5];
+      m12 = matrix4[12];
+      m13 = matrix4[13];
+    }
+
+    final verbs = path._verbs;
+    final points = path._points;
+    final weights = path._conicWeights;
+    var pi = 0;
+    var wi = 0;
+    var firstMove = true;
+
+    double tx(double x, double y) => m0 * x + m4 * y + m12 + dx;
+    double ty(double x, double y) => m1 * x + m5 * y + m13 + dy;
+
+    for (var i = 0; i < verbs.length; i++) {
+      switch (verbs[i]) {
+        case verbMove:
+          final x = points[pi];
+          final y = points[pi + 1];
+          pi += 2;
+          if (extend && firstMove && _verbsLen > 0) {
+            // Join the source's first contour to the current one.
+            lineTo(tx(x, y), ty(x, y));
+          } else {
+            moveTo(tx(x, y), ty(x, y));
+          }
+          firstMove = false;
+        case verbLine:
+          final x = points[pi];
+          final y = points[pi + 1];
+          pi += 2;
+          lineTo(tx(x, y), ty(x, y));
+        case verbQuad:
+          final x1 = points[pi];
+          final y1 = points[pi + 1];
+          final x2 = points[pi + 2];
+          final y2 = points[pi + 3];
+          pi += 4;
+          quadraticBezierTo(
+            tx(x1, y1), ty(x1, y1),
+            tx(x2, y2), ty(x2, y2),
+          );
+        case verbConic:
+          final x1 = points[pi];
+          final y1 = points[pi + 1];
+          final x2 = points[pi + 2];
+          final y2 = points[pi + 3];
+          pi += 4;
+          // Conic weights are invariant under affine maps.
+          conicTo(
+            tx(x1, y1), ty(x1, y1),
+            tx(x2, y2), ty(x2, y2),
+            weights[wi++],
+          );
+        case verbCubic:
+          final x1 = points[pi];
+          final y1 = points[pi + 1];
+          final x2 = points[pi + 2];
+          final y2 = points[pi + 3];
+          final x3 = points[pi + 4];
+          final y3 = points[pi + 5];
+          pi += 6;
+          cubicTo(
+            tx(x1, y1), ty(x1, y1),
+            tx(x2, y2), ty(x2, y2),
+            tx(x3, y3), ty(x3, y3),
+          );
+        case verbClose:
+          close();
+      }
+    }
+  }
+
   /// Closes the current contour by connecting the current point back to the
   /// most recent `moveTo`.
   ///

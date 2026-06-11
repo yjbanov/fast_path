@@ -600,3 +600,70 @@ class AddArcsUi500Benchmark extends FastPathBenchmark {
     sink ^= _path.fillType.index;
   }
 }
+
+ui.Path _buildUiStamp() {
+  final b = ui.Path()..moveTo(0, 0);
+  for (var i = 1; i <= 20; i++) {
+    b.lineTo(i * 2.0, (i * 1.7) % 10);
+  }
+  for (var i = 0; i < 19; i++) {
+    b.quadraticBezierTo(40 - i * 2.0, 12 + (i % 3) * 2.0, 38 - i * 2.0, 12);
+  }
+  b.conicTo(-2, 6, 0, 0, 0.8);
+  b.close();
+  return b;
+}
+
+/// Mirrors `AddPath100Benchmark`. 100 `ui.Path.addPath` stampings.
+class AddPathUi100Benchmark extends FastPathBenchmark {
+  AddPathUi100Benchmark() : super('add_path_ui_100');
+
+  late ui.Path _path;
+  late ui.Path _stamp;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+    _stamp = _buildUiStamp();
+  }
+
+  @override
+  void run() {
+    _path.reset();
+    for (var i = 0; i < 100; i++) {
+      _path.addPath(
+        _stamp,
+        ui.Offset((i % 10) * 45.0, (i ~/ 10) * 15.0),
+      );
+    }
+    sink ^= _path.fillType.index;
+  }
+}
+
+/// Mirrors `ExtendWithPath100Benchmark`.
+class ExtendWithPathUi100Benchmark extends FastPathBenchmark {
+  ExtendWithPathUi100Benchmark() : super('extend_with_path_ui_100');
+
+  late ui.Path _path;
+  late ui.Path _stamp;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+    _stamp = _buildUiStamp();
+  }
+
+  @override
+  void run() {
+    _path
+      ..reset()
+      ..moveTo(0, 0);
+    for (var i = 0; i < 100; i++) {
+      _path.extendWithPath(
+        _stamp,
+        ui.Offset((i % 10) * 45.0, (i ~/ 10) * 15.0),
+      );
+    }
+    sink ^= _path.fillType.index;
+  }
+}

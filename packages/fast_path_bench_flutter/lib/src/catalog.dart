@@ -133,6 +133,22 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: AddArcsUi500Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Add path (stamping)',
+        description:
+            '100 addPath calls scattering a 40-segment stamp across a '
+            'canvas.',
+        createFp: fp.AddPath100Benchmark.new,
+        createUi: AddPathUi100Benchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Extend with path',
+        description:
+            '100 extendWithPath joins chaining the same stamp into one '
+            'connected contour.',
+        createFp: fp.ExtendWithPath100Benchmark.new,
+        createUi: ExtendWithPathUi100Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Build with quads',
         description:
             'Per-frame reuse, 500 quadraticBezierTo segments. Stresses '
