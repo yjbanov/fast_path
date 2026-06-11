@@ -133,6 +133,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: AddArcsUi500Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Arc to point (SVG arcs)',
+        description:
+            '500 chained arcToPoint calls with mixed radii, rotations, '
+            'and flags. The SVG path-data workload.',
+        createFp: fp.ArcToPoint500Benchmark.new,
+        createUi: ArcToPointUi500Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Add path (stamping)',
         description:
             '100 addPath calls scattering a 40-segment stamp across a '

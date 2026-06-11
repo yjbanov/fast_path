@@ -667,3 +667,32 @@ class ExtendWithPathUi100Benchmark extends FastPathBenchmark {
     sink ^= _path.fillType.index;
   }
 }
+
+/// Mirrors `ArcToPoint500Benchmark`. 500 `ui.Path.arcToPoint` calls.
+class ArcToPointUi500Benchmark extends FastPathBenchmark {
+  ArcToPointUi500Benchmark() : super('arc_to_point_ui_500');
+
+  late ui.Path _path;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+  }
+
+  @override
+  void run() {
+    _path
+      ..reset()
+      ..moveTo(0, 0);
+    for (var i = 0; i < 500; i++) {
+      _path.arcToPoint(
+        ui.Offset((i + 1) * 2.0, (i % 5) * 10.0),
+        radius: ui.Radius.elliptical(8 + (i % 4).toDouble(), 6),
+        rotation: (i % 6) * 15.0,
+        largeArc: i.isEven,
+        clockwise: i % 3 != 0,
+      );
+    }
+    sink ^= _path.fillType.index;
+  }
+}

@@ -93,6 +93,15 @@ abstract class PathTarget {
     double dy, [
     List<double>? matrix4,
   ]);
+  void arcToPoint(
+    double x,
+    double y, {
+    required double rx,
+    required double ry,
+    double rotation = 0,
+    bool largeArc = false,
+    bool clockwise = true,
+  });
   void close();
   set evenOdd(bool value);
 }
@@ -254,6 +263,24 @@ class _FpTarget implements PathTarget {
         fp.Offset(dx, dy),
         matrix4:
             matrix4 == null ? null : Float64List.fromList(matrix4),
+      );
+
+  @override
+  void arcToPoint(
+    double x,
+    double y, {
+    required double rx,
+    required double ry,
+    double rotation = 0,
+    bool largeArc = false,
+    bool clockwise = true,
+  }) =>
+      _b.arcToPoint(
+        fp.Offset(x, y),
+        radius: fp.Radius.elliptical(rx, ry),
+        rotation: rotation,
+        largeArc: largeArc,
+        clockwise: clockwise,
       );
 
   @override
@@ -421,6 +448,24 @@ class _UiTarget implements PathTarget {
         ui.Offset(dx, dy),
         matrix4:
             matrix4 == null ? null : Float64List.fromList(matrix4),
+      );
+
+  @override
+  void arcToPoint(
+    double x,
+    double y, {
+    required double rx,
+    required double ry,
+    double rotation = 0,
+    bool largeArc = false,
+    bool clockwise = true,
+  }) =>
+      _p.arcToPoint(
+        ui.Offset(x, y),
+        radius: ui.Radius.elliptical(rx, ry),
+        rotation: rotation,
+        largeArc: largeArc,
+        clockwise: clockwise,
       );
 
   @override
@@ -1510,6 +1555,97 @@ final List<_Case> _cases = <_Case>[
       fp.Offset(70, 35), // triangle interior
       fp.Offset(40, 12), // near the join line — inside the joined fill
       fp.Offset(20, 40),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'arcToPoint clockwise semicircle (over the top)',
+    (t) => t
+      ..moveTo(0, 50)
+      ..arcToPoint(90, 50, rx: 45, ry: 45)
+      ..close(),
+    const [
+      fp.Offset(45, 25),
+      fp.Offset(45, 8),
+      fp.Offset(80, 12), // outside the radius, inside the bbox
+      fp.Offset(45, 70),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'arcToPoint counterclockwise (under the bottom)',
+    (t) => t
+      ..moveTo(0, 50)
+      ..arcToPoint(90, 50, rx: 45, ry: 45, clockwise: false)
+      ..close(),
+    const [
+      fp.Offset(45, 75),
+      fp.Offset(45, 25),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'arcToPoint largeArc wraps the long way',
+    (t) => t
+      ..moveTo(50, 0)
+      ..arcToPoint(95, 45, rx: 45, ry: 45, largeArc: true)
+      ..close(),
+    const [
+      fp.Offset(120, 10),
+      fp.Offset(70, 15),
+      fp.Offset(20, 20),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'arcToPoint undersized radii scale up',
+    (t) => t
+      ..moveTo(0, 50)
+      ..arcToPoint(90, 50, rx: 9, ry: 9)
+      ..close(),
+    const [
+      fp.Offset(45, 25),
+      fp.Offset(45, 70),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    // Also pins that `rotation` is interpreted in DEGREES (a radians
+    // implementation would produce a visibly different ellipse).
+    'arcToPoint elliptical radii with 45-degree rotation',
+    // Probes stay clear of the closing chord (y = 50) and the arc
+    // itself — boundary points are tie-broken differently by the two
+    // implementations (verified: the full interior/exterior agrees).
+    (t) => t
+      ..moveTo(0, 50)
+      ..arcToPoint(80, 50, rx: 60, ry: 25, rotation: 45)
+      ..close(),
+    const [
+      fp.Offset(30, 25),
+      fp.Offset(40, 30),
+      fp.Offset(-45, 20),
+      fp.Offset(90, 25),
+      fp.Offset(40, 70),
+      fp.Offset(75, 30),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'arcToPoint zero radius degenerates to a line',
+    (t) => t
+      ..moveTo(0, 0)
+      ..arcToPoint(90, 45, rx: 0, ry: 0)
+      ..lineTo(0, 45)
+      ..close(),
+    const [
+      fp.Offset(30, 25),
+      fp.Offset(60, 10),
       ..._gridFar,
     ],
   ),

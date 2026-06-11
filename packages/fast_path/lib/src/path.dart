@@ -485,6 +485,155 @@ final class PathBuilder {
     arcTo(oval, startAngle, sweepAngle, true);
   }
 
+  /// Adds an arc from the current point to [arcEnd] using the SVG
+  /// endpoint parameterization: an ellipse with the given [radius],
+  /// rotated [rotation] *degrees* around its center, chosen from the
+  /// four candidate arcs by [largeArc] and [clockwise].
+  ///
+  /// Degenerate inputs follow the SVG rules (and Skia/`dart:ui`):
+  /// a zero or non-finite radius produces a straight line to [arcEnd];
+  /// radii too small to span the endpoints scale up uniformly until
+  /// they fit; identical endpoints are a no-op.
+  ///
+  /// Behaves identically to `Path.arcToPoint` in `dart:ui`, except that
+  /// this method lives on [PathBuilder] rather than `Path`.
+  void arcToPoint(
+    Offset arcEnd, {
+    Radius radius = Radius.zero,
+    double rotation = 0.0,
+    bool largeArc = false,
+    bool clockwise = true,
+  }) {
+    final (x1, y1) = _currentPoint();
+    final x2 = arcEnd.dx;
+    final y2 = arcEnd.dy;
+    var rx = radius.x.abs();
+    var ry = radius.y.abs();
+
+    if (x1 == x2 && y1 == y2) {
+      return;
+    }
+    if (rx == 0 || ry == 0 || !rx.isFinite || !ry.isFinite) {
+      lineTo(x2, y2);
+      return;
+    }
+
+    // SVG F.6.5: endpoint → center parameterization.
+    final phi = rotation * math.pi / 180;
+    final cosPhi = math.cos(phi);
+    final sinPhi = math.sin(phi);
+
+    final dx2 = (x1 - x2) / 2;
+    final dy2 = (y1 - y2) / 2;
+    final x1p = cosPhi * dx2 + sinPhi * dy2;
+    final y1p = -sinPhi * dx2 + cosPhi * dy2;
+
+    // Scale radii up if they cannot span the endpoints (F.6.6).
+    final lambda = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+    if (lambda > 1) {
+      final s = math.sqrt(lambda);
+      rx *= s;
+      ry *= s;
+    }
+
+    final rx2 = rx * rx;
+    final ry2 = ry * ry;
+    final x1p2 = x1p * x1p;
+    final y1p2 = y1p * y1p;
+    var num = rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2;
+    if (num < 0) {
+      num = 0; // guard FP noise after the lambda scale-up
+    }
+    final den = rx2 * y1p2 + ry2 * x1p2;
+    var factor = den == 0 ? 0.0 : math.sqrt(num / den);
+    // `clockwise` is the SVG sweep flag: sweep=1 picks the
+    // positive-angle (screen-clockwise) arc.
+    if (largeArc == clockwise) {
+      factor = -factor;
+    }
+    final cxp = factor * rx * y1p / ry;
+    final cyp = -factor * ry * x1p / rx;
+
+    final cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2;
+    final cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2;
+
+    final startAngle = math.atan2((y1p - cyp) / ry, (x1p - cxp) / rx);
+    final endAngle = math.atan2((-y1p - cyp) / ry, (-x1p - cxp) / rx);
+    var sweep = endAngle - startAngle;
+    const twoPi = 2 * math.pi;
+    if (clockwise && sweep < 0) {
+      sweep += twoPi;
+    } else if (!clockwise && sweep > 0) {
+      sweep -= twoPi;
+    }
+
+    _appendRotatedArc(cx, cy, rx, ry, cosPhi, sinPhi, startAngle, sweep);
+  }
+
+  /// Like [arcToPoint], with [arcEndDelta] relative to the current point.
+  ///
+  /// Behaves identically to `Path.relativeArcToPoint` in `dart:ui`,
+  /// except that this method lives on [PathBuilder] rather than `Path`.
+  void relativeArcToPoint(
+    Offset arcEndDelta, {
+    Radius radius = Radius.zero,
+    double rotation = 0.0,
+    bool largeArc = false,
+    bool clockwise = true,
+  }) {
+    final (cx, cy) = _currentPoint();
+    arcToPoint(
+      Offset(cx + arcEndDelta.dx, cy + arcEndDelta.dy),
+      radius: radius,
+      rotation: rotation,
+      largeArc: largeArc,
+      clockwise: clockwise,
+    );
+  }
+
+  /// Emits conic segments for an arc on the ellipse centered `(cx, cy)`
+  /// with radii `(rx, ry)` whose x-axis is rotated by the angle whose
+  /// cosine/sine are [cosPhi]/[sinPhi], starting at [startAngle]
+  /// (measured on the unrotated ellipse) and sweeping [sweep] radians.
+  /// The current point must already be at the arc's start.
+  void _appendRotatedArc(
+    double cx,
+    double cy,
+    double rx,
+    double ry,
+    double cosPhi,
+    double sinPhi,
+    double startAngle,
+    double sweep,
+  ) {
+    if (sweep == 0) {
+      return;
+    }
+    final n = (sweep.abs() / (math.pi / 2)).ceil();
+    final delta = sweep / n;
+    final half = delta / 2;
+    final w = math.cos(half.abs());
+    final controlScale = 1 / w;
+
+    double mapX(double ux, double uy) =>
+        cx + rx * ux * cosPhi - ry * uy * sinPhi;
+    double mapY(double ux, double uy) =>
+        cy + rx * ux * sinPhi + ry * uy * cosPhi;
+
+    var a0 = startAngle;
+    for (var i = 0; i < n; i++) {
+      final a1 = a0 + delta;
+      final mid = a0 + half;
+      final cuX = math.cos(mid) * controlScale;
+      final cuY = math.sin(mid) * controlScale;
+      final euX = math.cos(a1);
+      final euY = math.sin(a1);
+      conicTo(mapX(cuX, cuY), mapY(cuX, cuY), mapX(euX, euY),
+          mapY(euX, euY), w);
+      a0 = a1;
+    }
+  }
+
   /// Appends every contour of [path] to this builder, translated by
   /// [offset] and (optionally) transformed by [matrix4], a column-major
   /// 4×4 matrix. The offset is applied *after* the matrix, matching

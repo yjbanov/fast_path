@@ -37,6 +37,14 @@
   (affine-invariant). Perspective matrices throw `UnimplementedError`
   (documented; planned alongside M3's `Path.transform`). `add_path_100`
   and `extend_with_path_100` benchmark pairs added.
+- M2 complete — `PathBuilder.arcToPoint(Offset, {radius, rotation,
+  largeArc, clockwise})` and `relativeArcToPoint`: SVG endpoint
+  parameterization (spec F.6.5) converted to center form, emitted as
+  rotated-conic segments. `rotation` is in degrees (verified against
+  the engine empirically). Degenerate handling per the SVG rules: zero
+  or non-finite radius → straight line; undersized radii scale up
+  uniformly; identical endpoints → no-op. `arc_to_point_500` benchmark
+  pair added.
 
 
 - M1 complete (all curve verbs) — `PathBuilder.quadraticBezierTo`,
