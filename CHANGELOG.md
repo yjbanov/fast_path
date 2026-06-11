@@ -14,6 +14,13 @@
   representation as Skia. Parity cases discriminate circle membership
   by radius (catching any polygonal approximation) and verify the
   evenOdd annulus. `add_ovals_500` benchmark pair added.
+- `PathBuilder.addRRect(RRect)`: straight edges joined by conic corner
+  arcs. Radii normalize the way Skia's `SkRRect::scaleRadii` does —
+  negatives clamp to zero; when adjacent radii overflow an edge, all
+  radii scale down uniformly by the largest factor that fits every
+  edge. Zero-radius corners stay sharp. Parity covers uniform radii,
+  oversized radii (stadium shape), and per-corner elliptical radii.
+  `add_rrects_500` benchmark pair added.
 
 
 - M1 complete (all curve verbs) — `PathBuilder.quadraticBezierTo`,

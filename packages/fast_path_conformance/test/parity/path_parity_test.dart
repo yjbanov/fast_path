@@ -52,6 +52,17 @@ abstract class PathTarget {
   void addPolygon(List<(double, double)> points, bool close);
   void addRect(double l, double t, double r, double b);
   void addOval(double l, double t, double r, double b);
+  void addRRectUniform(double l, double t, double r, double b, double radius);
+  void addRRectCorners(
+    double l,
+    double t,
+    double r,
+    double b, {
+    required (double, double) topLeft,
+    required (double, double) topRight,
+    required (double, double) bottomRight,
+    required (double, double) bottomLeft,
+  });
   void close();
   set evenOdd(bool value);
 }
@@ -135,6 +146,33 @@ class _FpTarget implements PathTarget {
   @override
   void addOval(double l, double t, double r, double b) =>
       _b.addOval(fp.Rect.fromLTRB(l, t, r, b));
+
+  @override
+  void addRRectUniform(
+          double l, double t, double r, double b, double radius) =>
+      _b.addRRect(fp.RRect.fromRectAndRadius(
+        fp.Rect.fromLTRB(l, t, r, b),
+        fp.Radius.circular(radius),
+      ));
+
+  @override
+  void addRRectCorners(
+    double l,
+    double t,
+    double r,
+    double b, {
+    required (double, double) topLeft,
+    required (double, double) topRight,
+    required (double, double) bottomRight,
+    required (double, double) bottomLeft,
+  }) =>
+      _b.addRRect(fp.RRect.fromRectAndCorners(
+        fp.Rect.fromLTRB(l, t, r, b),
+        topLeft: fp.Radius.elliptical(topLeft.$1, topLeft.$2),
+        topRight: fp.Radius.elliptical(topRight.$1, topRight.$2),
+        bottomRight: fp.Radius.elliptical(bottomRight.$1, bottomRight.$2),
+        bottomLeft: fp.Radius.elliptical(bottomLeft.$1, bottomLeft.$2),
+      ));
 
   @override
   void close() => _b.close();
@@ -223,6 +261,33 @@ class _UiTarget implements PathTarget {
   @override
   void addOval(double l, double t, double r, double b) =>
       _p.addOval(ui.Rect.fromLTRB(l, t, r, b));
+
+  @override
+  void addRRectUniform(
+          double l, double t, double r, double b, double radius) =>
+      _p.addRRect(ui.RRect.fromRectAndRadius(
+        ui.Rect.fromLTRB(l, t, r, b),
+        ui.Radius.circular(radius),
+      ));
+
+  @override
+  void addRRectCorners(
+    double l,
+    double t,
+    double r,
+    double b, {
+    required (double, double) topLeft,
+    required (double, double) topRight,
+    required (double, double) bottomRight,
+    required (double, double) bottomLeft,
+  }) =>
+      _p.addRRect(ui.RRect.fromRectAndCorners(
+        ui.Rect.fromLTRB(l, t, r, b),
+        topLeft: ui.Radius.elliptical(topLeft.$1, topLeft.$2),
+        topRight: ui.Radius.elliptical(topRight.$1, topRight.$2),
+        bottomRight: ui.Radius.elliptical(bottomRight.$1, bottomRight.$2),
+        bottomLeft: ui.Radius.elliptical(bottomLeft.$1, bottomLeft.$2),
+      ));
 
   @override
   void close() => _p.close();
@@ -1098,6 +1163,50 @@ final List<_Case> _cases = <_Case>[
       fp.Offset(45, 45), // hole
       fp.Offset(45, 10), // ring
       fp.Offset(45, 30), // hole again (inside inner oval)
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addRRect uniform radius',
+    (t) => t.addRRectUniform(0, 0, 90, 90, 30),
+    const [
+      fp.Offset(45, 45),
+      fp.Offset(45, 5),
+      fp.Offset(5, 45),
+      fp.Offset(5, 5), // outside the rounded corner
+      fp.Offset(12, 12), // inside the corner arc
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addRRect oversized radii scale down (stadium)',
+    (t) => t.addRRectUniform(0, 0, 90, 45, 40),
+    const [
+      fp.Offset(45, 22),
+      fp.Offset(4, 4), // outside scaled corner
+      fp.Offset(8, 13), // inside scaled corner
+      fp.Offset(45, 40),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
+    'addRRect per-corner elliptical radii',
+    (t) => t.addRRectCorners(
+      0, 0, 90, 90,
+      topLeft: (40, 20),
+      topRight: (0, 0),
+      bottomRight: (25, 25),
+      bottomLeft: (10, 30),
+    ),
+    const [
+      fp.Offset(45, 45),
+      fp.Offset(86, 4), // sharp top-right corner — inside
+      fp.Offset(4, 4), // elliptical top-left — outside
+      fp.Offset(85, 85), // rounded bottom-right — outside
+      fp.Offset(45, 87),
       ..._gridFar,
     ],
   ),

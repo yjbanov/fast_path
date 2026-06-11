@@ -116,6 +116,15 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: AddOvalsUi500Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Add rounded rects',
+        description:
+            '500 addRRect calls per run on a reused builder. The '
+            'rounded-container workload; radii clamping + line/conic '
+            'mix.',
+        createFp: fp.AddRRects500Benchmark.new,
+        createUi: AddRRectsUi500Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'Build with quads',
         description:
             'Per-frame reuse, 500 quadraticBezierTo segments. Stresses '

@@ -539,3 +539,33 @@ class AddOvalsUi500Benchmark extends FastPathBenchmark {
     sink ^= _path.fillType.index;
   }
 }
+
+/// Mirrors `AddRRects500Benchmark`. 500 `ui.Path.addRRect` calls per
+/// run on a reused path.
+class AddRRectsUi500Benchmark extends FastPathBenchmark {
+  AddRRectsUi500Benchmark() : super('add_rrects_ui_500');
+
+  late ui.Path _path;
+  late List<ui.RRect> _rrects;
+
+  @override
+  void setup() {
+    _path = ui.Path();
+    _rrects = <ui.RRect>[
+      for (var i = 0; i < 500; i++)
+        ui.RRect.fromRectAndRadius(
+          ui.Rect.fromLTWH((i % 25) * 8.0, (i ~/ 25) * 8.0, 6.0, 5.0),
+          ui.Radius.circular(1.0 + (i % 3) * 0.5),
+        ),
+    ];
+  }
+
+  @override
+  void run() {
+    _path.reset();
+    for (var i = 0; i < _rrects.length; i++) {
+      _path.addRRect(_rrects[i]);
+    }
+    sink ^= _path.fillType.index;
+  }
+}

@@ -332,6 +332,83 @@ final class PathBuilder {
     close();
   }
 
+  /// Adds a closed rounded-rectangle contour: straight edges joined by
+  /// quarter-ellipse conic corners (weight √2/2), wound clockwise.
+  ///
+  /// Radii are normalized the way Skia's `SkRRect::scaleRadii` does
+  /// (and therefore the way `dart:ui` behaves): negative radii clamp to
+  /// zero, and if the radii of two adjacent corners overflow the edge
+  /// between them, *all* radii are scaled down uniformly by the largest
+  /// factor that makes every edge fit.
+  ///
+  /// Behaves identically to `Path.addRRect` in `dart:ui`, except that
+  /// this method lives on [PathBuilder] rather than `Path`.
+  void addRRect(RRect rrect) {
+    final l = rrect.left;
+    final t = rrect.top;
+    final r = rrect.right;
+    final b = rrect.bottom;
+    final width = r - l;
+    final height = b - t;
+
+    var tlX = rrect.tlRadiusX < 0 ? 0.0 : rrect.tlRadiusX;
+    var tlY = rrect.tlRadiusY < 0 ? 0.0 : rrect.tlRadiusY;
+    var trX = rrect.trRadiusX < 0 ? 0.0 : rrect.trRadiusX;
+    var trY = rrect.trRadiusY < 0 ? 0.0 : rrect.trRadiusY;
+    var brX = rrect.brRadiusX < 0 ? 0.0 : rrect.brRadiusX;
+    var brY = rrect.brRadiusY < 0 ? 0.0 : rrect.brRadiusY;
+    var blX = rrect.blRadiusX < 0 ? 0.0 : rrect.blRadiusX;
+    var blY = rrect.blRadiusY < 0 ? 0.0 : rrect.blRadiusY;
+
+    // Skia's scaleRadii: find the largest uniform scale that makes the
+    // radii of every edge's two corners fit within that edge.
+    var scale = 1.0;
+    void limit(double edge, double r1, double r2) {
+      final sum = r1 + r2;
+      if (sum > edge && sum > 0) {
+        final s = edge / sum;
+        if (s < scale) {
+          scale = s;
+        }
+      }
+    }
+
+    limit(width, tlX, trX); // top
+    limit(height, trY, brY); // right
+    limit(width, blX, brX); // bottom
+    limit(height, tlY, blY); // left
+    if (scale < 1.0) {
+      tlX *= scale;
+      tlY *= scale;
+      trX *= scale;
+      trY *= scale;
+      brX *= scale;
+      brY *= scale;
+      blX *= scale;
+      blY *= scale;
+    }
+
+    const w = _quarterArcWeight;
+    moveTo(l + tlX, t);
+    lineTo(r - trX, t);
+    if (trX > 0 && trY > 0) {
+      conicTo(r, t, r, t + trY, w);
+    }
+    lineTo(r, b - brY);
+    if (brX > 0 && brY > 0) {
+      conicTo(r, b, r - brX, b, w);
+    }
+    lineTo(l + blX, b);
+    if (blX > 0 && blY > 0) {
+      conicTo(l, b, l, b - blY, w);
+    }
+    lineTo(l, t + tlY);
+    if (tlX > 0 && tlY > 0) {
+      conicTo(l, t, l + tlX, t, w);
+    }
+    close();
+  }
+
   /// Closes the current contour by connecting the current point back to the
   /// most recent `moveTo`.
   ///
