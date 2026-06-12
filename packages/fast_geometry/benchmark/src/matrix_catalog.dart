@@ -259,6 +259,56 @@ class _Matrix4Det extends _LoopBench {
   double step() => _a.determinant();
 }
 
+class _MatrixEquals extends _LoopBench {
+  _MatrixEquals(super.name, this._build);
+  final (Matrix, Matrix) Function() _build;
+  late Matrix _a;
+  late Matrix _b;
+  @override
+  void setup() {
+    final (a, b) = _build();
+    _a = a;
+    _b = b;
+  }
+  @override
+  double step() => (_a == _b) ? 1.0 : 0.0;
+}
+
+class _Matrix4Equals extends _LoopBench {
+  _Matrix4Equals(super.name, this._build);
+  final (Matrix4, Matrix4) Function() _build;
+  late Matrix4 _a;
+  late Matrix4 _b;
+  @override
+  void setup() {
+    final (a, b) = _build();
+    _a = a;
+    _b = b;
+  }
+  @override
+  double step() => (_a == _b) ? 1.0 : 0.0;
+}
+
+class _MatrixHash extends _LoopBench {
+  _MatrixHash(super.name, this._build);
+  final Matrix Function() _build;
+  late Matrix _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.hashCode.toDouble();
+}
+
+class _Matrix4Hash extends _LoopBench {
+  _Matrix4Hash(super.name, this._build);
+  final Matrix4 Function() _build;
+  late Matrix4 _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.hashCode.toDouble();
+}
+
 /// The matrix benchmark catalog: fast_geometry's [Matrix] as the subject,
 /// `package:vector_math`'s `Matrix4` as the reference baseline.
 Catalog matrixCatalog() => Catalog(
@@ -365,6 +415,28 @@ Catalog matrixCatalog() => Catalog(
         BenchmarkEntry(
           subject: () => _MatrixDet('Determinant: complex', _mComplexA),
           reference: () => _Matrix4Det('Determinant: complex', _m4ComplexA),
+        ),
+
+        // Equality & hashing.
+        BenchmarkEntry(
+          subject: () => _MatrixEquals(
+              'Equals: simple == simple', () => (_mSimpleA(), _mSimpleA())),
+          reference: () => _Matrix4Equals(
+              'Equals: simple == simple', () => (_m4SimpleA(), _m4SimpleA())),
+        ),
+        BenchmarkEntry(
+          subject: () => _MatrixEquals(
+              'Equals: complex == complex', () => (_mComplexA(), _mComplexA())),
+          reference: () => _Matrix4Equals('Equals: complex == complex',
+              () => (_m4ComplexA(), _m4ComplexA())),
+        ),
+        BenchmarkEntry(
+          subject: () => _MatrixHash('HashCode: simple', _mSimpleA),
+          reference: () => _Matrix4Hash('HashCode: simple', _m4SimpleA),
+        ),
+        BenchmarkEntry(
+          subject: () => _MatrixHash('HashCode: complex', _mComplexA),
+          reference: () => _Matrix4Hash('HashCode: complex', _m4ComplexA),
         ),
       ],
     );

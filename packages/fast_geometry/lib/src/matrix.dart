@@ -352,7 +352,77 @@ final class Matrix {
       return _generalInvert(this, rest);
     }
   }
+
+  /// Whether [other] is a [Matrix] with the same 16 entries.
+  ///
+  /// Relies on the canonical-lowering invariant: equal transforms are always
+  /// stored in the same shape, so a `_rest` null/non-null mismatch is enough to
+  /// decide inequality without comparing the extension. Follows IEEE-754
+  /// double semantics, so a matrix containing a NaN entry is not equal to
+  /// itself (unless it is the identical instance); `+0.0` and `-0.0` entries
+  /// compare equal.
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    if (other is! Matrix) {
+      return false;
+    }
+    final _MatrixExtension? rest = _rest;
+    final _MatrixExtension? otherRest = other._rest;
+    if ((rest == null) != (otherRest == null)) {
+      return false;
+    }
+    if (_m00 != other._m00 ||
+        _m11 != other._m11 ||
+        _m03 != other._m03 ||
+        _m13 != other._m13) {
+      return false;
+    }
+    if (rest == null) {
+      return true;
+    }
+    return rest._equals(otherRest!);
+  }
+
+  @override
+  int get hashCode {
+    final _MatrixExtension? rest = _rest;
+    if (rest == null) {
+      return Object.hash(
+        _normalizeZero(_m00),
+        _normalizeZero(_m11),
+        _normalizeZero(_m03),
+        _normalizeZero(_m13),
+      );
+    }
+    return Object.hash(
+      _normalizeZero(_m00),
+      _normalizeZero(_m11),
+      _normalizeZero(_m03),
+      _normalizeZero(_m13),
+      rest._hash,
+    );
+  }
+
+  @override
+  String toString() {
+    String row(double a, double b, double c, double d) =>
+        '[$a, $b, $c, $d]';
+    return 'Matrix(\n'
+        '  ${row(m00, m01, m02, m03)}\n'
+        '  ${row(m10, m11, m12, m13)}\n'
+        '  ${row(m20, m21, m22, m23)}\n'
+        '  ${row(m30, m31, m32, m33)}\n'
+        ')';
+  }
 }
+
+// Maps -0.0 to +0.0 (and leaves every other value, including NaN, untouched) so
+// that the hashCode of two matrices that compare equal under `==` agrees even
+// when one holds a negative zero. `-0.0 == 0.0` is true, so the hash must match.
+double _normalizeZero(double v) => v == 0.0 ? 0.0 : v;
 
 @immutable
 final class _MatrixExtension {
@@ -443,6 +513,40 @@ final class _MatrixExtension {
       m33: _m33 + other._m33,
     );
   }
+
+  /// Field-wise equality over the 12 extension entries. Used by [Matrix.==]
+  /// once the four core fields have already matched.
+  bool _equals(_MatrixExtension other) =>
+      _m01 == other._m01 &&
+      _m02 == other._m02 &&
+      _m10 == other._m10 &&
+      _m12 == other._m12 &&
+      _m20 == other._m20 &&
+      _m21 == other._m21 &&
+      _m22 == other._m22 &&
+      _m23 == other._m23 &&
+      _m30 == other._m30 &&
+      _m31 == other._m31 &&
+      _m32 == other._m32 &&
+      _m33 == other._m33;
+
+  /// Structural hash over the 12 extension entries (negative zeros normalized),
+  /// folded into [Matrix.hashCode]. Not an `Object.hashCode` override: the
+  /// extension is private and only ever hashed via its owning [Matrix].
+  int get _hash => Object.hash(
+        _normalizeZero(_m01),
+        _normalizeZero(_m02),
+        _normalizeZero(_m10),
+        _normalizeZero(_m12),
+        _normalizeZero(_m20),
+        _normalizeZero(_m21),
+        _normalizeZero(_m22),
+        _normalizeZero(_m23),
+        _normalizeZero(_m30),
+        _normalizeZero(_m31),
+        _normalizeZero(_m32),
+        _normalizeZero(_m33),
+      );
 }
 
 Matrix _generalMultiply(
