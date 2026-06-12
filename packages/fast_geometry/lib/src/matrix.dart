@@ -2,52 +2,6 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
-// Matrix shapes:
-
-// Identity:
-//   1  0  0  0
-//   0  1  0  0
-//   0  0  1  0
-//   0  0  0  1
-
-// Translation 2D:
-//   1  0  0  x
-//   0  1  0  y
-//   0  0  1  0
-//   0  0  0  1
-
-// General 2D:
-//   sx k1 0  x
-//   k2 sy 0  y
-//   0  0  1  0
-//   0  0  0  1
-
-// Most general case:
-//   m00 m01 m02 m03
-//   m10 m11 m12 m13
-//   m20 m21 m22 m23
-//   m30 m31 m32 m33
-//
-//   sx k1 m8 x
-//   k2 sy m9 y
-//   m2 m6 sz z
-//   p1 p2 p3 w
-
-//     class Matrix {
-//       m00 (scaleX)
-//       m11 (scaleY)
-//       m03 (dx)
-//       m13 (dy)
-//       _MatrixExtension? rest
-//     }
-//
-//     class _MatrixExtension {
-//           m01 m02
-//       m10     m12
-//       m20 m21 m22 m23
-//       m30 m31 m32 m33
-//     }
-
 @immutable
 final class Matrix {
   /// The identity transform.
@@ -70,7 +24,7 @@ final class Matrix {
   ///     0  0  0  1
   ///
   /// If both `x` and `y` are zero, returns the [identity] constant.
-  static Matrix translation2d({ required double dx, required double dy }) {
+  static Matrix translation2d({required double dx, required double dy}) {
     if (dx == 0 && dy == 0) {
       return identity;
     }
@@ -229,7 +183,11 @@ final class Matrix {
     required double m03,
     required double m13,
     _MatrixExtension? rest,
-  }) : _m00 = m00, _m11 = m11, _m03 = m03, _m13 = m13, _rest = rest;
+  })  : _m00 = m00,
+        _m11 = m11,
+        _m03 = m03,
+        _m13 = m13,
+        _rest = rest;
 
   final double _m00;
   final double _m11;
@@ -297,7 +255,7 @@ final class Matrix {
     _MatrixExtension? rest;
     if (otherRest != null || selfRest != null) {
       rest = (selfRest ?? _MatrixExtension._identityExtension) +
-             (otherRest ?? _MatrixExtension._identityExtension);
+          (otherRest ?? _MatrixExtension._identityExtension);
     }
 
     return Matrix._(
@@ -335,11 +293,13 @@ final class Matrix {
           m13: _m13 + _m11 * n13,
         );
       } else {
-        return _generalMultiply(this, selfRest, other, _MatrixExtension._identityExtension);
+        return _generalMultiply(
+            this, selfRest, other, _MatrixExtension._identityExtension);
       }
     } else {
       if (selfRest == null) {
-        return _generalMultiply(this, _MatrixExtension._identityExtension, other, otherRest);
+        return _generalMultiply(
+            this, _MatrixExtension._identityExtension, other, otherRest);
       } else {
         return _generalMultiply(this, selfRest, other, otherRest);
       }
@@ -381,8 +341,8 @@ final class Matrix {
       return Matrix.simple2d(
         scaleX: a11 * invDet,
         scaleY: a00 * invDet,
-        dx: - a11 * a30 * invDet,
-        dy: - a00 * a31 * invDet,
+        dx: -a11 * a30 * invDet,
+        dy: -a00 * a31 * invDet,
       );
     } else {
       return _generalInvert(this, rest);
@@ -420,18 +380,18 @@ final class _MatrixExtension {
     required double m31,
     required double m32,
     required double m33,
-  }) : _m01 = m01,
-       _m02 = m02,
-       _m10 = m10,
-       _m12 = m12,
-       _m20 = m20,
-       _m21 = m21,
-       _m22 = m22,
-       _m23 = m23,
-       _m30 = m30,
-       _m31 = m31,
-       _m32 = m32,
-       _m33 = m33;
+  })  : _m01 = m01,
+        _m02 = m02,
+        _m10 = m10,
+        _m12 = m12,
+        _m20 = m20,
+        _m21 = m21,
+        _m22 = m22,
+        _m23 = m23,
+        _m30 = m30,
+        _m31 = m31,
+        _m32 = m32,
+        _m33 = m33;
 
   final double _m01;
   final double _m02;
@@ -481,7 +441,8 @@ final class _MatrixExtension {
   }
 }
 
-Matrix _generalMultiply(Matrix m, _MatrixExtension mExt, Matrix n, _MatrixExtension nExt) {
+Matrix _generalMultiply(
+    Matrix m, _MatrixExtension mExt, Matrix n, _MatrixExtension nExt) {
   final double m00 = m._m00;
   final double m01 = mExt._m01;
   final double m02 = mExt._m02;
@@ -654,14 +615,25 @@ Matrix? _generalInvert(Matrix matrix, _MatrixExtension rest) {
   );
 }
 
-
 extension Float64ListToMatrix on Float64List {
   /// Builds a [Matrix] from a column-major 4x4 list (the representation
   /// dart:ui.Path.transform and Matrix4.storage use).
   Matrix toMatrix() => Matrix.transform(
-        m00: this[0], m10: this[1], m20: this[2], m30: this[3],
-        m01: this[4], m11: this[5], m21: this[6], m31: this[7],
-        m02: this[8], m12: this[9], m22: this[10], m32: this[11],
-        m03: this[12], m13: this[13], m23: this[14], m33: this[15],
+        m00: this[0],
+        m10: this[1],
+        m20: this[2],
+        m30: this[3],
+        m01: this[4],
+        m11: this[5],
+        m21: this[6],
+        m31: this[7],
+        m02: this[8],
+        m12: this[9],
+        m22: this[10],
+        m32: this[11],
+        m03: this[12],
+        m13: this[13],
+        m23: this[14],
+        m33: this[15],
       );
 }
