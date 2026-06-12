@@ -2,6 +2,7 @@
 // Use of this source code is governed by the BSD-3-Clause license in the
 // project root LICENSE file.
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
@@ -178,6 +179,107 @@ final class Matrix {
         m32: m32,
         m33: m33,
       ),
+    );
+  }
+
+  /// A 2D rotation about the Z axis by [radians] (counterclockwise).
+  ///
+  /// Lowers to [identity] when [radians] is a multiple of 2π (`sin` is 0 and
+  /// `cos` is 1). Numerically matches `Matrix4.rotationZ`.
+  static Matrix rotationZ(double radians) {
+    final double c = math.cos(radians);
+    final double s = math.sin(radians);
+    return Matrix.transform2d(
+        scaleX: c, scaleY: c, k1: -s, k2: s, dx: 0, dy: 0);
+  }
+
+  /// A rotation about the X axis by [radians]. Numerically matches
+  /// `Matrix4.rotationX`.
+  static Matrix rotationX(double radians) {
+    final double c = math.cos(radians);
+    final double s = math.sin(radians);
+    return Matrix.transform(
+      m00: 1, m01: 0, m02: 0, m03: 0,
+      m10: 0, m11: c, m12: -s, m13: 0,
+      m20: 0, m21: s, m22: c, m23: 0,
+      m30: 0, m31: 0, m32: 0, m33: 1,
+    );
+  }
+
+  /// A rotation about the Y axis by [radians]. Numerically matches
+  /// `Matrix4.rotationY`.
+  static Matrix rotationY(double radians) {
+    final double c = math.cos(radians);
+    final double s = math.sin(radians);
+    return Matrix.transform(
+      m00: c, m01: 0, m02: s, m03: 0,
+      m10: 0, m11: 1, m12: 0, m13: 0,
+      m20: -s, m21: 0, m22: c, m23: 0,
+      m30: 0, m31: 0, m32: 0, m33: 1,
+    );
+  }
+
+  /// A 2D skew. [alpha] skews the x axis, [beta] the y axis; each angle's
+  /// tangent becomes the corresponding off-diagonal term, matching
+  /// `Matrix4.skew`. Lowers to [identity] when both angles are 0.
+  static Matrix skew(double alpha, double beta) {
+    return Matrix.transform2d(
+      scaleX: 1,
+      scaleY: 1,
+      k1: math.tan(alpha),
+      k2: math.tan(beta),
+      dx: 0,
+      dy: 0,
+    );
+  }
+
+  /// A 2D scale. [sy] defaults to [sx] (uniform scale). Lowers to [identity]
+  /// when both factors are 1.
+  static Matrix scale(double sx, [double? sy]) {
+    return Matrix.simple2d(scaleX: sx, scaleY: sy ?? sx, dx: 0, dy: 0);
+  }
+
+  /// An orthographic projection matrix. Numerically matches vector_math's
+  /// `makeOrthographicMatrix`.
+  static Matrix orthographic(
+    double left,
+    double right,
+    double bottom,
+    double top,
+    double near,
+    double far,
+  ) {
+    final double rml = right - left;
+    final double tmb = top - bottom;
+    final double fmn = far - near;
+    return Matrix.transform(
+      m00: 2.0 / rml, m01: 0, m02: 0, m03: -(right + left) / rml,
+      m10: 0, m11: 2.0 / tmb, m12: 0, m13: -(top + bottom) / tmb,
+      m20: 0, m21: 0, m22: -2.0 / fmn, m23: -(far + near) / fmn,
+      m30: 0, m31: 0, m32: 0, m33: 1,
+    );
+  }
+
+  /// A perspective projection matrix. [fovYRadians] is the vertical field of
+  /// view. Numerically matches vector_math's `makePerspectiveMatrix`. The
+  /// result is not affine (it has a perspective tail), so [isAffine2d] is
+  /// false.
+  static Matrix perspective(
+    double fovYRadians,
+    double aspectRatio,
+    double zNear,
+    double zFar,
+  ) {
+    final double height = 1.0 / math.tan(fovYRadians * 0.5);
+    final double width = height / aspectRatio;
+    final double nearMinusFar = zNear - zFar;
+    return Matrix.transform(
+      m00: width, m01: 0, m02: 0, m03: 0,
+      m10: 0, m11: height, m12: 0, m13: 0,
+      m20: 0, m21: 0,
+      m22: (zFar + zNear) / nearMinusFar,
+      m23: 2.0 * zNear * zFar / nearMinusFar,
+      m30: 0, m31: 0, m32: -1, m33: 0,
     );
   }
 

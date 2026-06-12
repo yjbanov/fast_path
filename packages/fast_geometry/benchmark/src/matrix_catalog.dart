@@ -153,6 +153,42 @@ class _InstM4Complex extends _LoopBench {
       .storage[0];
 }
 
+class _InstMRotationZ extends _LoopBench {
+  _InstMRotationZ() : super('Factory: rotationZ');
+  @override
+  double step() => Matrix.rotationZ(0.5).scaleX;
+}
+
+class _InstM4RotationZ extends _LoopBench {
+  _InstM4RotationZ() : super('Factory: rotationZ');
+  @override
+  double step() => Matrix4.rotationZ(0.5).storage[0];
+}
+
+class _InstMScale extends _LoopBench {
+  _InstMScale() : super('Factory: scale');
+  @override
+  double step() => Matrix.scale(2, 3).scaleX;
+}
+
+class _InstM4Scale extends _LoopBench {
+  _InstM4Scale() : super('Factory: scale');
+  @override
+  double step() => Matrix4.diagonal3Values(2, 3, 1).storage[0];
+}
+
+class _InstMPerspective extends _LoopBench {
+  _InstMPerspective() : super('Factory: perspective');
+  @override
+  double step() => Matrix.perspective(1.0, 1.5, 0.1, 100).scaleX;
+}
+
+class _InstM4Perspective extends _LoopBench {
+  _InstM4Perspective() : super('Factory: perspective');
+  @override
+  double step() => makePerspectiveMatrix(1.0, 1.5, 0.1, 100).storage[0];
+}
+
 // --------------------------------------------------------------------------
 // Binary and unary operations. Operands vary by case but the operation is
 // fixed, so one class per operation/side takes an operand builder run once in
@@ -335,6 +371,23 @@ Catalog matrixCatalog() => Catalog(
           subject: _InstMComplex.new,
           reference: _InstM4Complex.new,
           description: 'Construct a rotation + translation matrix (incl. trig).',
+        ),
+
+        // Factory constructors.
+        const BenchmarkEntry(
+          subject: _InstMRotationZ.new,
+          reference: _InstM4RotationZ.new,
+          description: 'Construct a 2D Z-rotation matrix.',
+        ),
+        const BenchmarkEntry(
+          subject: _InstMScale.new,
+          reference: _InstM4Scale.new,
+          description: 'Construct a 2D scale matrix.',
+        ),
+        const BenchmarkEntry(
+          subject: _InstMPerspective.new,
+          reference: _InstM4Perspective.new,
+          description: 'Construct a perspective projection matrix.',
         ),
 
         // Multiplication.
