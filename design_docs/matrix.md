@@ -101,13 +101,19 @@ The current `Matrix` implementation is a proof-of-concept. To make it a fully fe
 
 Unlike `vector_math` which is mutable, `Matrix` is deeply immutable. Therefore, any operations that would conceptually "mutate" a matrix must instead return a new `Matrix` instance.
 
-### 1. Equality & Debugging
+### 1. Benchmarking & Correctness Foundation
+Before adding new features, we must establish a rigorous foundation for measuring performance and correctness:
+- **Benchmark Harness**: Create a generalized benchmark harness capable of comparing `fast_path` against Flutter's `dart:ui`, and `fast_geometry`'s `Matrix` against `package:vector_math`'s `Matrix4`.
+- **Baseline Benchmarks**: Write a comprehensive set of benchmarks for all *existing* matrix functionality, comparing it head-to-head with `vector_math`.
+- **Skills Update**: Update or add AI guidance skills (similar to the existing `fast_path` skills) to cover both packages. These skills will ensure that all new functionality is implemented correctly, well-tested, and rigorously benchmarked.
+
+### 2. Equality & Debugging
 Basic object overrides are currently missing and are essential for testing and UI state comparison.
 - `operator ==(Object other)`: Implement a structural equality check (fast-pathing with `identical`).
 - `int get hashCode`: Compute a hash over the 16 matrix elements (optimizing for the `_rest == null` case).
 - `String toString()`: Output a formatted 4x4 grid representation.
 
-### 2. Factory Constructors
+### 3. Factory Constructors
 Add factory constructors for common transformations that we currently lack:
 - `Matrix.rotationZ(double radians)`
 - `Matrix.rotationX(double radians)`
@@ -117,18 +123,18 @@ Add factory constructors for common transformations that we currently lack:
 - `Matrix.orthographic(double left, double right, double bottom, double top, double near, double far)`
 - `Matrix.perspective(double fovYRadians, double aspectRatio, double zNear, double zFar)`
 
-### 3. Transformation Methods (Composition)
+### 4. Transformation Methods (Composition)
 Since the matrix is immutable, we will add methods that compose a new transformation onto the current matrix (`this * new_transform`) and return the result:
 - `Matrix translated(double dx, double dy)`
 - `Matrix scaled(double sx, [double? sy])`
 - `Matrix rotatedZ(double radians)`
 - `Matrix skewed(double alpha, double beta)`
 
-### 4. Geometry Transformation
+### 5. Geometry Transformation
 The core utility of a matrix is transforming geometry. We will add methods to transform `fast_geometry` types, utilizing our shape-encoded fast paths:
 - `Offset transformPoint(Offset point)`: Fast-paths for `isTranslation2d` and `isSimple2d`.
 - `Rect transformRect(Rect rect)`: Transforms the corners and computes the bounding box. Fast-paths for `isSimple2d` (just scale/translate the left/top/right/bottom edges).
 - `Offset transformVector(Offset vector)`: Transforms ignoring translation.
 
-### 5. Matrix Operations
+### 6. Matrix Operations
 - `Matrix transposed()`: Returns a new matrix with the rows and columns swapped.
