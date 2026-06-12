@@ -94,3 +94,41 @@ The API exposes convenient getters to query these shapes:
 
 ### 5. Concrete Types
 Input types are always the most concrete numeric types (`double`, or typed lists via interop). It avoids varargs, `dynamic` typing, and runtime pattern matching on arguments to ensure peak compilation and execution efficiency.
+
+## Implementation Plan: Fully Featured API
+
+The current `Matrix` implementation is a proof-of-concept. To make it a fully featured 2D-focused library, we must expand its API surface to achieve feature parity with common operations found in libraries like `package:vector_math`'s `Matrix4`. 
+
+Unlike `vector_math` which is mutable, `Matrix` is deeply immutable. Therefore, any operations that would conceptually "mutate" a matrix must instead return a new `Matrix` instance.
+
+### 1. Equality & Debugging
+Basic object overrides are currently missing and are essential for testing and UI state comparison.
+- `operator ==(Object other)`: Implement a structural equality check (fast-pathing with `identical`).
+- `int get hashCode`: Compute a hash over the 16 matrix elements (optimizing for the `_rest == null` case).
+- `String toString()`: Output a formatted 4x4 grid representation.
+
+### 2. Factory Constructors
+Add factory constructors for common transformations that we currently lack:
+- `Matrix.rotationZ(double radians)`
+- `Matrix.rotationX(double radians)`
+- `Matrix.rotationY(double radians)`
+- `Matrix.skew(double alpha, double beta)`
+- `Matrix.scale(double sx, [double? sy])` (sy defaults to sx if omitted)
+- `Matrix.orthographic(double left, double right, double bottom, double top, double near, double far)`
+- `Matrix.perspective(double fovYRadians, double aspectRatio, double zNear, double zFar)`
+
+### 3. Transformation Methods (Composition)
+Since the matrix is immutable, we will add methods that compose a new transformation onto the current matrix (`this * new_transform`) and return the result:
+- `Matrix translated(double dx, double dy)`
+- `Matrix scaled(double sx, [double? sy])`
+- `Matrix rotatedZ(double radians)`
+- `Matrix skewed(double alpha, double beta)`
+
+### 4. Geometry Transformation
+The core utility of a matrix is transforming geometry. We will add methods to transform `fast_geometry` types, utilizing our shape-encoded fast paths:
+- `Offset transformPoint(Offset point)`: Fast-paths for `isTranslation2d` and `isSimple2d`.
+- `Rect transformRect(Rect rect)`: Transforms the corners and computes the bounding box. Fast-paths for `isSimple2d` (just scale/translate the left/top/right/bottom edges).
+- `Offset transformVector(Offset vector)`: Transforms ignoring translation.
+
+### 5. Matrix Operations
+- `Matrix transposed()`: Returns a new matrix with the rows and columns swapped.
