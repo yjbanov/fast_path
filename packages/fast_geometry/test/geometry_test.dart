@@ -162,12 +162,4 @@ void main() {
       expect(a, isNot(equals(c)));
     });
   });
-
-  group('PathFillType', () {
-    test('exposes both fill rules', () {
-      expect(PathFillType.values, hasLength(2));
-      expect(PathFillType.values, contains(PathFillType.nonZero));
-      expect(PathFillType.values, contains(PathFillType.evenOdd));
-    });
-  });
 }

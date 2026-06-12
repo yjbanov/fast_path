@@ -1,3 +1,7 @@
+// Copyright 2026 The fast_path Authors.
+// Use of this source code is governed by the BSD-3-Clause license in the
+// project root LICENSE file.
+
 import 'dart:math' as math;
 import 'package:fast_geometry/fast_geometry.dart';
 import 'package:vector_math/vector_math_64.dart';

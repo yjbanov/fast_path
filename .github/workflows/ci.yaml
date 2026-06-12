@@ -27,6 +27,10 @@ jobs:
       - name: Analyze
         run: dart analyze
 
+      - name: Test fast_geometry
+        working-directory: packages/fast_geometry
+        run: dart test --reporter=expanded
+
       - name: Test fast_path
         working-directory: packages/fast_path
         run: dart test --reporter=expanded

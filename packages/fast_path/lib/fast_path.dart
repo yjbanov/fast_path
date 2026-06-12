@@ -11,3 +11,4 @@ library;
 
 export 'package:fast_geometry/fast_geometry.dart';
 export 'src/path.dart';
+export 'src/path_fill_type.dart';

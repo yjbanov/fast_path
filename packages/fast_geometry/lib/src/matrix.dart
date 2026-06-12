@@ -1,3 +1,7 @@
+// Copyright 2026 The fast_path Authors.
+// Use of this source code is governed by the BSD-3-Clause license in the
+// project root LICENSE file.
+
 import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
@@ -130,7 +134,7 @@ final class Matrix {
     required double m32,
     required double m33,
   }) {
-    // Lower to simplae 2D if possible to avoid allocation of extension.
+    // Lower to simple 2D if possible to avoid allocation of extension.
     //     *  0  0  *
     //     0  *  0  *
     //     0  0  1  0
