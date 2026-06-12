@@ -21,8 +21,29 @@
   covers scale, 90° rotation, perspective-on-quad, and perspective-on-
   conic. `transform_path_1k` benchmark pair added.
 
+- `Path.computeMetrics({bool forceClosed = false})` returning
+  `PathMetrics` (an iterable of `PathMetric`), plus the `PathMetric` and
+  `Tangent` types. Each contour is flattened to a polyline with a
+  cumulative arc-length table (adaptive curve subdivision, including a
+  rational de Casteljau split for conics). `PathMetric` exposes `length`,
+  `isClosed`, `contourIndex`, and `getTangentForOffset(distance)` (binary
+  search + interpolation, distance clamped to `[0, length]`). `Tangent`
+  exposes `position`, `vector`, `angle` (negated `atan2`, matching the
+  engine), and `Tangent.fromAngle`. Unlike `dart:ui`'s one-shot
+  `PathMetrics`, ours is re-iterable (the path is immutable). Length
+  parity holds to ~0.5% (arc length is an approximation on both sides;
+  polylines match to floating-point); tangent positions match within
+  0.5 units at equal contour fractions. `metrics_tangents_64` benchmark
+  pair added (essentially tied with `dart:ui`).
+
 ### Changed
 
+- `PathBuilder.addRRect` now starts its contour at `(left, bottom −
+  blRadius)` and winds clockwise up the left edge first, matching the
+  start vertex and direction of `dart:ui.Path.addRRect` / Skia. The
+  filled shape is unchanged (contains/bounds are start-independent), but
+  the traversal now lines up segment-for-segment — which `computeMetrics`
+  made observable. Surfaced and fixed while adding metric parity.
 - `PathBuilder.addPath` / `extendWithPath` rewritten from replaying the
   source's verbs through the public builder methods to a bulk
   buffer-copy with an in-place point transform (translate / affine /

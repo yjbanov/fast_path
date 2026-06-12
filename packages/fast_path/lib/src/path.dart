@@ -388,8 +388,18 @@ final class PathBuilder {
       blY *= scale;
     }
 
+    // Start on the left edge just above the bottom-left corner and wind
+    // clockwise (up the left edge first). This matches the start vertex
+    // and direction of `dart:ui.Path.addRRect` / Skia, which makes the
+    // contour line up segment-for-segment — observable through
+    // `computeMetrics` (where the traversal origin matters) even though
+    // the filled shape is start-independent.
     const w = _quarterArcWeight;
-    moveTo(l + tlX, t);
+    moveTo(l, b - blY);
+    lineTo(l, t + tlY);
+    if (tlX > 0 && tlY > 0) {
+      conicTo(l, t, l + tlX, t, w);
+    }
     lineTo(r - trX, t);
     if (trX > 0 && trY > 0) {
       conicTo(r, t, r, t + trY, w);
@@ -401,10 +411,6 @@ final class PathBuilder {
     lineTo(l + blX, b);
     if (blX > 0 && blY > 0) {
       conicTo(l, b, l, b - blY, w);
-    }
-    lineTo(l, t + tlY);
-    if (tlX > 0 && tlY > 0) {
-      conicTo(l, t, l + tlX, t, w);
     }
     close();
   }
@@ -1834,5 +1840,364 @@ final class Path {
     }
     _cachedHashCode = h;
     return h;
+  }
+
+  /// Returns a measurement object for each contour in this path.
+  ///
+  /// If [forceClosed] is true, each contour is measured as though it
+  /// ended with a `close` (its final segment runs back to its start),
+  /// even if it does not.
+  ///
+  /// Behaves identically to `Path.computeMetrics` in `dart:ui`. Because
+  /// [Path] is immutable, the returned [PathMetrics] is re-iterable and
+  /// needs none of the "underlying path mutated" guard `dart:ui` carries.
+  PathMetrics computeMetrics({bool forceClosed = false}) {
+    return PathMetrics._(_buildContours(forceClosed));
+  }
+
+  /// Flattens each contour into a polyline with a cumulative arc-length
+  /// table and wraps it in a [PathMetric]. Curves are adaptively
+  /// subdivided to [_flattenTolerance].
+  List<PathMetric> _buildContours(bool forceClosed) {
+    final metrics = <PathMetric>[];
+    if (_verbs.isEmpty) {
+      return metrics;
+    }
+
+    final xs = <double>[];
+    final ys = <double>[];
+    var startX = 0.0;
+    var startY = 0.0;
+    var curX = 0.0;
+    var curY = 0.0;
+    var open = false;
+    var explicitlyClosed = false;
+    var contourIndex = 0;
+    var pointIdx = 0;
+    var weightIdx = 0;
+
+    void finalizeContour() {
+      if (!open) {
+        return;
+      }
+      open = false;
+      final closed = explicitlyClosed || forceClosed;
+      if (!explicitlyClosed && forceClosed) {
+        xs.add(startX);
+        ys.add(startY);
+      }
+      if (xs.length >= 2) {
+        metrics.add(PathMetric._build(contourIndex, closed, xs, ys));
+      }
+      contourIndex++;
+      xs.clear();
+      ys.clear();
+    }
+
+    for (var i = 0; i < _verbs.length; i++) {
+      switch (_verbs[i]) {
+        case verbMove:
+          finalizeContour();
+          startX = curX = _points[pointIdx];
+          startY = curY = _points[pointIdx + 1];
+          xs.add(startX);
+          ys.add(startY);
+          open = true;
+          explicitlyClosed = false;
+          pointIdx += 2;
+        case verbLine:
+          curX = _points[pointIdx];
+          curY = _points[pointIdx + 1];
+          xs.add(curX);
+          ys.add(curY);
+          pointIdx += 2;
+        case verbQuad:
+          final cx = _points[pointIdx];
+          final cy = _points[pointIdx + 1];
+          final ex = _points[pointIdx + 2];
+          final ey = _points[pointIdx + 3];
+          _flattenQuad(xs, ys, curX, curY, cx, cy, ex, ey, 0);
+          curX = ex;
+          curY = ey;
+          pointIdx += 4;
+        case verbConic:
+          final cx = _points[pointIdx];
+          final cy = _points[pointIdx + 1];
+          final ex = _points[pointIdx + 2];
+          final ey = _points[pointIdx + 3];
+          final w = _conicWeights[weightIdx++];
+          _flattenConic(xs, ys, curX, curY, cx, cy, ex, ey, w, 0);
+          curX = ex;
+          curY = ey;
+          pointIdx += 4;
+        case verbCubic:
+          final c1x = _points[pointIdx];
+          final c1y = _points[pointIdx + 1];
+          final c2x = _points[pointIdx + 2];
+          final c2y = _points[pointIdx + 3];
+          final ex = _points[pointIdx + 4];
+          final ey = _points[pointIdx + 5];
+          _flattenCubic(
+              xs, ys, curX, curY, c1x, c1y, c2x, c2y, ex, ey, 0);
+          curX = ex;
+          curY = ey;
+          pointIdx += 6;
+        case verbClose:
+          if (curX != startX || curY != startY) {
+            xs.add(startX);
+            ys.add(startY);
+          }
+          curX = startX;
+          curY = startY;
+          explicitlyClosed = true;
+      }
+    }
+    finalizeContour();
+    return metrics;
+  }
+
+  // Maximum recursion depth and flatness tolerance (squared, in path
+  // units) for the metric flattener. The tolerance is tight enough that
+  // arc-length agrees with the engine to well within the parity bounds.
+  static const int _maxFlattenDepth = 18;
+  static const double _flattenTolerance = 0.02;
+  static const double _flattenToleranceSq =
+      _flattenTolerance * _flattenTolerance;
+
+  static double _perpDistanceSq(
+    double px,
+    double py,
+    double ax,
+    double ay,
+    double bx,
+    double by,
+  ) {
+    final dx = bx - ax;
+    final dy = by - ay;
+    final lenSq = dx * dx + dy * dy;
+    if (lenSq == 0) {
+      final ex = px - ax;
+      final ey = py - ay;
+      return ex * ex + ey * ey;
+    }
+    final cross = (px - ax) * dy - (py - ay) * dx;
+    return (cross * cross) / lenSq;
+  }
+
+  static void _flattenQuad(
+    List<double> xs,
+    List<double> ys,
+    double x0,
+    double y0,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    int depth,
+  ) {
+    if (depth >= _maxFlattenDepth ||
+        _perpDistanceSq(x1, y1, x0, y0, x2, y2) <= _flattenToleranceSq) {
+      xs.add(x2);
+      ys.add(y2);
+      return;
+    }
+    final x01 = (x0 + x1) * 0.5;
+    final y01 = (y0 + y1) * 0.5;
+    final x12 = (x1 + x2) * 0.5;
+    final y12 = (y1 + y2) * 0.5;
+    final mx = (x01 + x12) * 0.5;
+    final my = (y01 + y12) * 0.5;
+    _flattenQuad(xs, ys, x0, y0, x01, y01, mx, my, depth + 1);
+    _flattenQuad(xs, ys, mx, my, x12, y12, x2, y2, depth + 1);
+  }
+
+  static void _flattenCubic(
+    List<double> xs,
+    List<double> ys,
+    double x0,
+    double y0,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double x3,
+    double y3,
+    int depth,
+  ) {
+    final d1 = _perpDistanceSq(x1, y1, x0, y0, x3, y3);
+    final d2 = _perpDistanceSq(x2, y2, x0, y0, x3, y3);
+    if (depth >= _maxFlattenDepth ||
+        (d1 <= _flattenToleranceSq && d2 <= _flattenToleranceSq)) {
+      xs.add(x3);
+      ys.add(y3);
+      return;
+    }
+    final x01 = (x0 + x1) * 0.5;
+    final y01 = (y0 + y1) * 0.5;
+    final x12 = (x1 + x2) * 0.5;
+    final y12 = (y1 + y2) * 0.5;
+    final x23 = (x2 + x3) * 0.5;
+    final y23 = (y2 + y3) * 0.5;
+    final x012 = (x01 + x12) * 0.5;
+    final y012 = (y01 + y12) * 0.5;
+    final x123 = (x12 + x23) * 0.5;
+    final y123 = (y12 + y23) * 0.5;
+    final mx = (x012 + x123) * 0.5;
+    final my = (y012 + y123) * 0.5;
+    _flattenCubic(
+        xs, ys, x0, y0, x01, y01, x012, y012, mx, my, depth + 1);
+    _flattenCubic(
+        xs, ys, mx, my, x123, y123, x23, y23, x3, y3, depth + 1);
+  }
+
+  static void _flattenConic(
+    List<double> xs,
+    List<double> ys,
+    double x0,
+    double y0,
+    double x1,
+    double y1,
+    double x2,
+    double y2,
+    double w,
+    int depth,
+  ) {
+    if (depth >= _maxFlattenDepth ||
+        _perpDistanceSq(x1, y1, x0, y0, x2, y2) <= _flattenToleranceSq) {
+      xs.add(x2);
+      ys.add(y2);
+      return;
+    }
+    // Rational de Casteljau split at t = 0.5 (Skia SkConic::chop).
+    final scale = 1.0 / (1.0 + w);
+    final newW = math.sqrt(0.5 + 0.5 * w);
+    final wp1x = w * x1;
+    final wp1y = w * y1;
+    final mx = (x0 + 2 * wp1x + x2) * scale * 0.5;
+    final my = (y0 + 2 * wp1y + y2) * scale * 0.5;
+    final l1x = (x0 + wp1x) * scale;
+    final l1y = (y0 + wp1y) * scale;
+    final r1x = (wp1x + x2) * scale;
+    final r1y = (wp1y + y2) * scale;
+    _flattenConic(xs, ys, x0, y0, l1x, l1y, mx, my, newW, depth + 1);
+    _flattenConic(xs, ys, mx, my, r1x, r1y, x2, y2, newW, depth + 1);
+  }
+}
+
+/// An iterable of [PathMetric], one per contour, as returned by
+/// [Path.computeMetrics].
+///
+/// Mirrors `dart:ui.PathMetrics`. Unlike `dart:ui`'s one-shot iterable,
+/// this is re-iterable: [Path] is immutable, so the measurements never
+/// go stale.
+final class PathMetrics extends Iterable<PathMetric> {
+  PathMetrics._(this._metrics);
+
+  final List<PathMetric> _metrics;
+
+  @override
+  Iterator<PathMetric> get iterator => _metrics.iterator;
+}
+
+/// Measurement of a single contour: its arc length, and position and
+/// tangent at any distance along it.
+///
+/// Mirrors `dart:ui.PathMetric`. Obtained from [Path.computeMetrics].
+final class PathMetric {
+  PathMetric._(this.contourIndex, this.isClosed, this._xs, this._ys,
+      this._dists, this.length);
+
+  /// Builds a metric from a flattened polyline, computing the cumulative
+  /// arc-length table.
+  factory PathMetric._build(
+    int contourIndex,
+    bool isClosed,
+    List<double> xs,
+    List<double> ys,
+  ) {
+    final m = xs.length;
+    final px = Float64List(m);
+    final py = Float64List(m);
+    final dists = Float64List(m);
+    px[0] = xs[0];
+    py[0] = ys[0];
+    var total = 0.0;
+    for (var i = 1; i < m; i++) {
+      px[i] = xs[i];
+      py[i] = ys[i];
+      final dx = xs[i] - xs[i - 1];
+      final dy = ys[i] - ys[i - 1];
+      total += math.sqrt(dx * dx + dy * dy);
+      dists[i] = total;
+    }
+    return PathMetric._(contourIndex, isClosed, px, py, dists, total);
+  }
+
+  /// The index of this contour within the path (0-based, in build order).
+  final int contourIndex;
+
+  /// Whether this contour is closed — either it ended with a `close`, or
+  /// `forceClosed: true` was passed to [Path.computeMetrics].
+  final bool isClosed;
+
+  /// The total arc length of this contour.
+  final double length;
+
+  final Float64List _xs;
+  final Float64List _ys;
+  final Float64List _dists;
+
+  /// Returns the position and tangent direction at [distance] along the
+  /// contour, or `null` if the contour has zero length.
+  ///
+  /// [distance] is clamped to `[0, length]`, matching `dart:ui` (which
+  /// clamps inside the engine's path measure).
+  ///
+  /// Behaves identically to `PathMetric.getTangentForOffset` in
+  /// `dart:ui`.
+  Tangent? getTangentForOffset(double distance) {
+    final n = _dists.length;
+    if (n < 2 || length == 0) {
+      return null;
+    }
+    var d = distance;
+    if (d <= 0) {
+      d = 0;
+    } else if (d >= length) {
+      d = length;
+    }
+    // Binary search for the segment [i, i+1] containing distance d.
+    var lo = 0;
+    var hi = n - 1;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (_dists[mid] < d) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    // lo is the first index with _dists[lo] >= d. The containing segment
+    // ends at lo (starts at lo-1), except at d == 0 where lo == 0.
+    final seg = lo == 0 ? 1 : lo;
+    final segLen = _dists[seg] - _dists[seg - 1];
+    final t = segLen == 0 ? 0.0 : (d - _dists[seg - 1]) / segLen;
+    final ax = _xs[seg - 1];
+    final ay = _ys[seg - 1];
+    final bx = _xs[seg];
+    final by = _ys[seg];
+    final posX = ax + (bx - ax) * t;
+    final posY = ay + (by - ay) * t;
+    var vx = bx - ax;
+    var vy = by - ay;
+    final vlen = math.sqrt(vx * vx + vy * vy);
+    if (vlen == 0) {
+      vx = 1.0;
+      vy = 0.0;
+    } else {
+      vx /= vlen;
+      vy /= vlen;
+    }
+    return Tangent(Offset(posX, posY), Offset(vx, vy));
   }
 }

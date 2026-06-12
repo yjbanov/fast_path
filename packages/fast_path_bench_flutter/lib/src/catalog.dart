@@ -229,6 +229,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: TransformPathUi1kBenchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Metrics + tangents',
+        description:
+            'computeMetrics + 64 getTangentForOffset samples along a '
+            'curve-heavy contour. The path-following / dashing workload.',
+        createFp: fp.Metrics64Benchmark.new,
+        createUi: MetricsUi64Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'getBounds — cached',
         description:
             '1000 calls on a path whose bounds cache is primed. Should '

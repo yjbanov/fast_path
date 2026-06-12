@@ -765,3 +765,42 @@ class TransformPathUi1kBenchmark extends FastPathBenchmark {
   @override
   int get opsPerRun => 1000;
 }
+
+/// Mirrors `Metrics64Benchmark`. computeMetrics + 64 tangent samples on
+/// a curve-heavy closed `ui.Path`.
+class MetricsUi64Benchmark extends FastPathBenchmark {
+  MetricsUi64Benchmark() : super('metrics_tangents_ui_64');
+
+  late ui.Path _path;
+
+  @override
+  int get opsPerRun => 64;
+
+  @override
+  void setup() {
+    _path = ui.Path()..moveTo(0, 0);
+    for (var i = 0; i < 16; i++) {
+      final x = (i + 1) * 12.0;
+      _path.cubicTo(
+        x - 8, math.sin(i) * 30,
+        x - 4, math.cos(i) * 30,
+        x, (i.isEven ? 10 : -10).toDouble(),
+      );
+    }
+    _path.close();
+  }
+
+  @override
+  void run() {
+    final metric = _path.computeMetrics().first;
+    final len = metric.length;
+    var acc = 0;
+    for (var i = 0; i < 64; i++) {
+      final t = metric.getTangentForOffset(len * i / 64);
+      if (t != null) {
+        acc ^= t.position.dx.toInt();
+      }
+    }
+    sink ^= acc;
+  }
+}

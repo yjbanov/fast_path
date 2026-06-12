@@ -353,3 +353,35 @@ final class RRect {
         blRadiusY,
       ]);
 }
+
+/// The position and tangent direction at a point on a path contour, as
+/// returned by `PathMetric.getTangentForOffset`.
+///
+/// Mirrors `dart:ui.Tangent`.
+final class Tangent {
+  /// Creates a tangent with the given [position] and (unit) [vector].
+  const Tangent(this.position, this.vector);
+
+  /// Creates a tangent at [position] whose [vector] points in the
+  /// direction [angle] (in radians, measured clockwise from the +x axis
+  /// in the screen's y-down coordinate space — see [angle]).
+  factory Tangent.fromAngle(Offset position, double angle) =>
+      Tangent(position, Offset(math.cos(angle), math.sin(angle)));
+
+  /// The position on the contour.
+  final Offset position;
+
+  /// The unit vector tangent to the contour at [position], pointing in
+  /// the direction of increasing distance.
+  final Offset vector;
+
+  /// The angle of [vector] in radians, in the range (-π, π].
+  ///
+  /// Matches `dart:ui.Tangent.angle`, which negates the raw `atan2` so
+  /// that a positive angle is counter-clockwise in the usual math sense
+  /// despite the y-down screen space.
+  double get angle => -math.atan2(vector.dy, vector.dx);
+
+  @override
+  String toString() => 'Tangent($position, $vector)';
+}

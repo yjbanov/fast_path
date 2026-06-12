@@ -1837,7 +1837,98 @@ Float64List _fpPerspective(double px, double py) => Float64List.fromList([
     ]);
 Float64List _uiPerspective(double px, double py) => _fpPerspective(px, py);
 
+/// computeMetrics parity cases: build a path via the program, compare
+/// per-contour length and sampled tangent positions against dart:ui.
+class _MetricsCase {
+  const _MetricsCase(this.name, this.program, {this.forceClosed = false});
+  final String name;
+  final PathProgram program;
+  final bool forceClosed;
+}
+
+final List<_MetricsCase> _metricsCases = <_MetricsCase>[
+  _MetricsCase('line', (t) => t
+    ..moveTo(0, 0)
+    ..lineTo(80, 60)),
+  _MetricsCase('open polyline', (t) => t
+    ..moveTo(0, 0)
+    ..lineTo(40, 0)
+    ..lineTo(40, 30)),
+  _MetricsCase('open polyline forceClosed', (t) => t
+    ..moveTo(0, 0)
+    ..lineTo(40, 0)
+    ..lineTo(40, 30), forceClosed: true),
+  _MetricsCase('closed triangle', (t) => t
+    ..moveTo(0, 0)
+    ..lineTo(60, 0)
+    ..lineTo(30, 50)
+    ..close()),
+  _MetricsCase('circle', (t) => t.addOval(0, 0, 100, 100)),
+  _MetricsCase('rounded rect', (t) =>
+      t.addRRectUniform(0, 0, 120, 80, 20)),
+  _MetricsCase('quad arc', (t) => t
+    ..moveTo(0, 0)
+    ..quadraticBezierTo(50, 100, 100, 0)),
+  _MetricsCase('cubic S', (t) => t
+    ..moveTo(0, 0)
+    ..cubicTo(40, 80, 60, -80, 100, 0)),
+  _MetricsCase('two contours', (t) => t
+    ..addRect(0, 0, 30, 30)
+    ..addOval(50, 50, 110, 90)),
+];
+
 void main() {
+  group('computeMetrics parity vs dart:ui.Path', () {
+    for (final c in _metricsCases) {
+      test(c.name, () {
+        final fpMetrics = _buildFp(c.program)
+            .computeMetrics(forceClosed: c.forceClosed)
+            .toList();
+        final uiMetrics = _buildUi(c.program)
+            .computeMetrics(forceClosed: c.forceClosed)
+            .toList();
+        expect(fpMetrics.length, uiMetrics.length,
+            reason: 'contour count');
+        for (var i = 0; i < fpMetrics.length; i++) {
+          final fpm = fpMetrics[i];
+          final uim = uiMetrics[i];
+          // Length within ~0.5% relative. Arc length is an approximation
+          // on both sides (each flattens curves); fast_path's finer
+          // flattening lands a touch closer to the true length than the
+          // engine's coarser measure, so they agree to a few tenths of a
+          // percent rather than exactly. Polylines (no curves) match to
+          // floating-point.
+          final mag = uim.length.abs();
+          final lenTol = 5e-3 * (mag > 1 ? mag : 1) + 0.05;
+          expect((fpm.length - uim.length).abs(), lessThan(lenTol),
+              reason: 'contour $i length: fp=${fpm.length} ui=${uim.length}');
+          expect(fpm.isClosed, uim.isClosed, reason: 'contour $i isClosed');
+          // Sampled tangent positions at the same *fraction* of each
+          // contour's own length. Sampling at the same fraction (rather
+          // than the same absolute distance) isolates traversal-shape
+          // parity — same start, direction, and segment order — from the
+          // tiny length-magnitude difference already checked above. A
+          // start/direction mismatch (as addRRect once had) shows up
+          // here immediately.
+          for (final frac in const [0.1, 0.35, 0.5, 0.7, 0.9]) {
+            final ft = fpm.getTangentForOffset(fpm.length * frac);
+            final ut = uim.getTangentForOffset(uim.length * frac);
+            expect(ft != null, ut != null,
+                reason: 'contour $i nullity at frac $frac');
+            if (ft != null && ut != null) {
+              expect((ft.position.dx - ut.position.dx).abs(), lessThan(0.5),
+                  reason: 'contour $i pos.x at frac $frac: '
+                      'fp=${ft.position} ui=${ut.position}');
+              expect((ft.position.dy - ut.position.dy).abs(), lessThan(0.5),
+                  reason: 'contour $i pos.y at frac $frac: '
+                      'fp=${ft.position} ui=${ut.position}');
+            }
+          }
+        }
+      });
+    }
+  });
+
   group('M0 parity vs dart:ui.Path', () {
     for (final c in _cases) {
       group(c.name, () {
