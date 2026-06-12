@@ -637,17 +637,25 @@ final class PathBuilder {
   /// Appends every contour of [path] to this builder, translated by
   /// [offset] and (optionally) transformed by [matrix4], a column-major
   /// 4×4 matrix. The offset is applied *after* the matrix, matching
-  /// `dart:ui` (the engine folds the offset into the matrix's
-  /// translation).
+  /// `dart:ui`.
   ///
-  /// Only affine matrices are supported; a matrix with perspective
-  /// components (`matrix4[3]`, `[7]` ≠ 0 or `[15]` ≠ 1) throws
-  /// [UnimplementedError]. Perspective requires re-classifying curve
-  /// segments and is deferred (see DESIGN.md §6.5 — planned with M3's
-  /// `Path.transform`).
+  /// Both affine and perspective matrices are supported; a perspective
+  /// matrix applies the homogeneous divide per control point, keeping
+  /// verbs and conic weights unchanged (the same thing [Path.transform]
+  /// does — see its doc for the empirical basis). The semantics are
+  /// "transform by [matrix4], then translate by [offset]".
   ///
-  /// Behaves identically to `Path.addPath` in `dart:ui`, except that
-  /// this method lives on [PathBuilder] rather than `Path`.
+  /// Behaves identically to `Path.addPath` in `dart:ui` for an affine
+  /// matrix (with any offset) and for a perspective matrix with a zero
+  /// offset. The one corner that diverges is a perspective matrix
+  /// combined with a *non-zero* offset: `dart:ui` folds the offset into
+  /// the perspective matrix in a particular way that this
+  /// transform-then-translate model does not reproduce bit-for-bit.
+  /// That combination is rare; if you need it, transform first and add
+  /// at zero offset.
+  ///
+  /// Otherwise behaves identically to `Path.addPath` in `dart:ui`,
+  /// except that this method lives on [PathBuilder] rather than `Path`.
   void addPath(Path path, Offset offset, {Float64List? matrix4}) {
     _appendPath(path, offset.dx, offset.dy, matrix4, extend: false);
   }
@@ -670,92 +678,128 @@ final class PathBuilder {
     Float64List? matrix4, {
     required bool extend,
   }) {
-    // Affine components. Column-major 4x4: x' = m0·x + m4·y + m12,
-    // y' = m1·x + m5·y + m13. The offset lands after the matrix.
+    final srcVerbs = path._verbs;
+    final vN = srcVerbs.length;
+    if (vN == 0) {
+      return;
+    }
+    final srcPoints = path._points;
+    final srcWeights = path._conicWeights;
+    final pN = srcPoints.length;
+    final wN = srcWeights.length;
+
+    // Decode the matrix. Column-major 4x4: x' = m0·x + m4·y + m12,
+    // y' = m1·x + m5·y + m13, with a homogeneous divide by
+    // w = m3·x + m7·y + m15 when perspective. The offset (dx, dy) is
+    // added after the matrix (and after the divide), so it is not folded
+    // into m12/m13.
     var m0 = 1.0, m1 = 0.0, m4 = 0.0, m5 = 1.0, m12 = 0.0, m13 = 0.0;
+    var m3 = 0.0, m7 = 0.0, m15 = 1.0;
+    var perspective = false;
     if (matrix4 != null) {
-      if (matrix4[3] != 0 || matrix4[7] != 0 || matrix4[15] != 1.0) {
-        throw UnimplementedError(
-          'addPath/extendWithPath with a perspective matrix is not yet '
-          'supported; only affine matrices are. (Planned alongside M3\'s '
-          'Path.transform.)',
-        );
-      }
       m0 = matrix4[0];
       m1 = matrix4[1];
       m4 = matrix4[4];
       m5 = matrix4[5];
       m12 = matrix4[12];
       m13 = matrix4[13];
-    }
-
-    final verbs = path._verbs;
-    final points = path._points;
-    final weights = path._conicWeights;
-    var pi = 0;
-    var wi = 0;
-    var firstMove = true;
-
-    double tx(double x, double y) => m0 * x + m4 * y + m12 + dx;
-    double ty(double x, double y) => m1 * x + m5 * y + m13 + dy;
-
-    for (var i = 0; i < verbs.length; i++) {
-      switch (verbs[i]) {
-        case verbMove:
-          final x = points[pi];
-          final y = points[pi + 1];
-          pi += 2;
-          if (extend && firstMove && _verbsLen > 0) {
-            // Join the source's first contour to the current one.
-            lineTo(tx(x, y), ty(x, y));
-          } else {
-            moveTo(tx(x, y), ty(x, y));
-          }
-          firstMove = false;
-        case verbLine:
-          final x = points[pi];
-          final y = points[pi + 1];
-          pi += 2;
-          lineTo(tx(x, y), ty(x, y));
-        case verbQuad:
-          final x1 = points[pi];
-          final y1 = points[pi + 1];
-          final x2 = points[pi + 2];
-          final y2 = points[pi + 3];
-          pi += 4;
-          quadraticBezierTo(
-            tx(x1, y1), ty(x1, y1),
-            tx(x2, y2), ty(x2, y2),
-          );
-        case verbConic:
-          final x1 = points[pi];
-          final y1 = points[pi + 1];
-          final x2 = points[pi + 2];
-          final y2 = points[pi + 3];
-          pi += 4;
-          // Conic weights are invariant under affine maps.
-          conicTo(
-            tx(x1, y1), ty(x1, y1),
-            tx(x2, y2), ty(x2, y2),
-            weights[wi++],
-          );
-        case verbCubic:
-          final x1 = points[pi];
-          final y1 = points[pi + 1];
-          final x2 = points[pi + 2];
-          final y2 = points[pi + 3];
-          final x3 = points[pi + 4];
-          final y3 = points[pi + 5];
-          pi += 6;
-          cubicTo(
-            tx(x1, y1), ty(x1, y1),
-            tx(x2, y2), ty(x2, y2),
-            tx(x3, y3), ty(x3, y3),
-          );
-        case verbClose:
-          close();
+      if (matrix4[3] != 0 || matrix4[7] != 0 || matrix4[15] != 1.0) {
+        perspective = true;
+        m3 = matrix4[3];
+        m7 = matrix4[7];
+        m15 = matrix4[15];
       }
     }
+
+    // In extend mode against a non-empty builder, the source's first
+    // contour joins the current one: its opening `moveTo` becomes a
+    // `lineTo`. Emit that through the public method so the implicit-
+    // moveTo / post-close reopen rules compose, then bulk-append the
+    // remainder starting after that first point.
+    var vStart = 0;
+    var pStart = 0;
+    if (extend && _verbsLen > 0) {
+      assert(srcVerbs[0] == verbMove);
+      final x = srcPoints[0];
+      final y = srcPoints[1];
+      final double jx, jy;
+      if (perspective) {
+        final w = m3 * x + m7 * y + m15;
+        jx = (m0 * x + m4 * y + m12) / w + dx;
+        jy = (m1 * x + m5 * y + m13) / w + dy;
+      } else {
+        jx = m0 * x + m4 * y + m12 + dx;
+        jy = m1 * x + m5 * y + m13 + dy;
+      }
+      lineTo(jx, jy);
+      vStart = 1;
+      pStart = 2;
+    }
+
+    // Reserve exact capacity for the bulk append (no per-element growth).
+    final newVerbsLen = _verbsLen + (vN - vStart);
+    if (newVerbsLen > _verbs.length) {
+      _verbs = _growU8(_verbs, newVerbsLen);
+    }
+    final newPointsLen = _pointsLen + (pN - pStart);
+    if (newPointsLen > _points.length) {
+      _points = _growF32(_points, newPointsLen);
+    }
+    final newWeightsLen = _conicWeightsLen + wN;
+    if (wN > 0 && newWeightsLen > _conicWeights.length) {
+      _conicWeights = _growF32(_conicWeights, newWeightsLen);
+    }
+
+    // Transform-copy the points in one tight loop (no verb awareness).
+    final pointBase = _pointsLen;
+    if (matrix4 == null) {
+      // Translate-only fast path (no matrix) — the common "stamp at a
+      // position" case. Pure add, no multiplies.
+      var di = pointBase;
+      for (var si = pStart; si < pN; si += 2) {
+        _points[di++] = srcPoints[si] + dx;
+        _points[di++] = srcPoints[si + 1] + dy;
+      }
+    } else if (perspective) {
+      var di = pointBase;
+      for (var si = pStart; si < pN; si += 2) {
+        final x = srcPoints[si];
+        final y = srcPoints[si + 1];
+        final w = m3 * x + m7 * y + m15;
+        _points[di++] = (m0 * x + m4 * y + m12) / w + dx;
+        _points[di++] = (m1 * x + m5 * y + m13) / w + dy;
+      }
+    } else {
+      var di = pointBase;
+      for (var si = pStart; si < pN; si += 2) {
+        final x = srcPoints[si];
+        final y = srcPoints[si + 1];
+        _points[di++] = m0 * x + m4 * y + m12 + dx;
+        _points[di++] = m1 * x + m5 * y + m13 + dy;
+      }
+    }
+    _pointsLen = newPointsLen;
+
+    // Conic weights are invariant under any matrix map — bulk copy.
+    if (wN > 0) {
+      _conicWeights.setRange(_conicWeightsLen, newWeightsLen, srcWeights);
+      _conicWeightsLen = newWeightsLen;
+    }
+
+    // Copy verbs, tracking the last moveTo's builder-point index (for
+    // `close`) and the trailing verb (for the post-close reopen flag).
+    var pointCursor = pointBase;
+    var lastMove = _lastMoveToIndex;
+    for (var i = vStart; i < vN; i++) {
+      final verb = srcVerbs[i];
+      _verbs[_verbsLen++] = verb;
+      if (verb == verbMove) {
+        lastMove = pointCursor;
+      }
+      pointCursor += verbPointCount[verb] * 2;
+    }
+    _lastMoveToIndex = lastMove;
+    _contourClosed = srcVerbs[vN - 1] == verbClose;
   }
 
   /// Closes the current contour by connecting the current point back to the

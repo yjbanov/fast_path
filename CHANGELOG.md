@@ -21,6 +21,19 @@
   covers scale, 90° rotation, perspective-on-quad, and perspective-on-
   conic. `transform_path_1k` benchmark pair added.
 
+### Changed
+
+- `PathBuilder.addPath` / `extendWithPath` rewritten from replaying the
+  source's verbs through the public builder methods to a bulk
+  buffer-copy with an in-place point transform (translate / affine /
+  perspective branches; conic weights and verb bytes copied directly).
+  On the `add_path_100` benchmark (Flutter desktop AOT) this cut the
+  per-run cost from 38.7 µs to 16.7 µs (−57%), and `extend_with_path`
+  flipped from +43% slower than `dart:ui` to 39% faster. Perspective
+  matrices are now supported (the M2 `UnimplementedError` is gone);
+  see `addPath`'s doc for the one perspective-plus-non-zero-offset
+  corner that still diverges from the engine.
+
 
 - M2 begins — `PathBuilder.addRect(Rect)`: closed rectangular contour,
   clockwise from the top-left corner. Parity cases include nested

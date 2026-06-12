@@ -82,18 +82,21 @@ void main() {
       expect(b.bottom, closeTo(20, 1e-6));
     });
 
-    test('perspective matrix throws UnimplementedError', () {
+    test('perspective matrix applies the homogeneous divide', () {
+      // Same result as Path.transform with the same perspective matrix.
       final perspective = Float64List.fromList([
-        1, 0, 0, 0.001, //
-        0, 1, 0, 0, //
+        1, 0, 0, 0.004, //
+        0, 1, 0, 0.002, //
         0, 0, 1, 0, //
         0, 0, 0, 1,
       ]);
-      expect(
-        () => PathBuilder()
-            .addPath(_triangle(), Offset.zero, matrix4: perspective),
-        throwsUnimplementedError,
-      );
+      final src = (PathBuilder()..addRect(const Rect.fromLTRB(0, 0, 40, 30)))
+          .build();
+      final viaAddPath =
+          (PathBuilder()..addPath(src, Offset.zero, matrix4: perspective))
+              .build();
+      final viaTransform = src.transform(perspective);
+      expect(viaAddPath, equals(viaTransform));
     });
   });
 

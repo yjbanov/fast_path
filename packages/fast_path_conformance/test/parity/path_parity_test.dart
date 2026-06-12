@@ -1559,6 +1559,34 @@ final List<_Case> _cases = <_Case>[
   ),
 
   _Case(
+    // Zero offset: a perspective matrix combined with a *non-zero*
+    // offset composes the two in a dart:ui-specific way we don't
+    // replicate bit-for-bit (see addPath's dartdoc). The point-mapping
+    // itself is exact, which this zero-offset case pins down.
+    'addPath with a perspective matrix (no offset)',
+    (t) => t.addPath(
+      (s) => s
+        ..moveTo(0, 0)
+        ..lineTo(60, 0)
+        ..quadraticBezierTo(60, 40, 0, 40)
+        ..close(),
+      0,
+      0,
+      const [
+        1, 0, 0, 0.003, //
+        0, 1, 0, 0.0015, //
+        0, 0, 1, 0, //
+        0, 0, 0, 1,
+      ],
+    ),
+    const [
+      fp.Offset(25, 20),
+      fp.Offset(15, 12),
+      ..._gridFar,
+    ],
+  ),
+
+  _Case(
     'extendWithPath joins the first contour',
     (t) => t
       ..moveTo(0, 0)
