@@ -1,7 +1,7 @@
 # fast_path Design Document
 
 Status: Draft. Living document — expect churn as the API lands.
-Last updated: 2026-05-09.
+Last updated: 2026-06-11.
 
 ## 1. Background
 
@@ -486,6 +486,28 @@ the next.
   but Skia does (`SkStroke`). Worth offering? Out of scope for 1.0.
 - **Text paths.** Out of scope. Glyph outlines come from the engine's font
   system, not from Path itself.
+- **Typed verbs instead of raw `int`s.** The verb stream is a `Uint8List`
+  of small integers, with `const int verbMove = 0;` and companions. A
+  Dart 3 extension type (`extension type Verb(int raw)`) would give the
+  verb constants a distinct static type — catching "passed the wrong int"
+  at compile time — while compiling away to the underlying `int` at
+  runtime. The cost is a wrap on read out of the buffer. Low stakes;
+  worth a try during a post-1.0 internals pass.
+- **`verbPointCount` as a `switch` rather than a list lookup.** Today it
+  is a `const List<int>` indexed by the verb byte, which carries a bounds
+  check per access. A `switch` over the verb value should lower to a jump
+  table with no bounds check. The verb-stream walk is hot — `contains`,
+  `computeMetrics`, `transform`, and `addPath` all iterate it — so this is
+  worth an A/B benchmark: cheap to try, easy to measure.
+- **A typed matrix for `transform` / `addPath`.** These take
+  `Float64List matrix4` to mirror `dart:ui.Path` exactly (the
+  `add-path-api` skill makes parity-first signatures a rule). A typed
+  matrix — e.g. [uimatrix](https://github.com/yjbanov/uimatrix) — would be
+  friendlier and harder to misuse, but adopting it in the core would break
+  the drop-in shape and pull in a dependency. Likely resolution: keep
+  `Float64List` in the core for parity, and expose a typed-matrix
+  convenience (an extension or an overload) in the `fast_path_flutter`
+  bridge package, where a Flutter dependency is already assumed.
 
 ## 12. Contributing notes
 
