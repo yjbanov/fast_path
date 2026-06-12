@@ -4,6 +4,14 @@
 
 ### Added
 
+- M3 begins — `Path.shift(Offset)`: a pure function returning a new
+  translated [Path]. Verb and conic-weight buffers are shared with the
+  original (both immutable, never mutated), so only the point buffer is
+  allocated and translated. Parity verified via a new Path-level
+  operation harness in the conformance suite. `shift_path_1k` benchmark
+  pair added.
+
+
 - M2 begins — `PathBuilder.addRect(Rect)`: closed rectangular contour,
   clockwise from the top-left corner. Parity cases include nested
   same-direction rects (winding direction check) under both fill rules.

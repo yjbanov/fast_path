@@ -213,6 +213,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: ContainsCubicsGridUi1024Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Shift (translate)',
+        description:
+            '1000 shift calls returning fresh translated paths. The '
+            'pure-function reposition.',
+        createFp: fp.ShiftPath1kBenchmark.new,
+        createUi: ShiftPathUi1kBenchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'getBounds — cached',
         description:
             '1000 calls on a path whose bounds cache is primed. Should '

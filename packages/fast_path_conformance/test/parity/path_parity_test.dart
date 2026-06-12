@@ -534,6 +534,26 @@ class _Case {
   final List<fp.Offset> samples;
 }
 
+/// A parity case for a `Path`-level operation (a function from `Path` to
+/// `Path`, like `shift` or `transform`): build a base path via [program],
+/// apply [fpOp] / [uiOp] to the respective results, then compare bounds
+/// and containment on the transformed paths. [samples] are in the
+/// *transformed* coordinate space.
+class _PathOpCase {
+  const _PathOpCase(
+    this.name,
+    this.program,
+    this.fpOp,
+    this.uiOp,
+    this.samples,
+  );
+  final String name;
+  final PathProgram program;
+  final fp.Path Function(fp.Path) fpOp;
+  final ui.Path Function(ui.Path) uiOp;
+  final List<fp.Offset> samples;
+}
+
 const _gridFar = <fp.Offset>[
   fp.Offset(-100, -100),
   fp.Offset(100, -100),
@@ -1651,6 +1671,53 @@ final List<_Case> _cases = <_Case>[
   ),
 ];
 
+final List<_PathOpCase> _pathOpCases = <_PathOpCase>[
+  _PathOpCase(
+    'shift a mixed contour',
+    (t) => t
+      ..moveTo(0, 0)
+      ..lineTo(40, 0)
+      ..quadraticBezierTo(50, 20, 40, 40)
+      ..conicTo(20, 50, 0, 40, 0.8)
+      ..close(),
+    (p) => p.shift(const fp.Offset(100, 50)),
+    (p) => p.shift(const ui.Offset(100, 50)),
+    const [
+      fp.Offset(120, 70),
+      fp.Offset(105, 55),
+      fp.Offset(160, 70), // outside, to the right
+      fp.Offset(120, 45), // outside, above
+      ..._gridFar,
+    ],
+  ),
+  _PathOpCase(
+    'shift a circle preserves radius membership',
+    (t) => t.addOval(0, 0, 100, 100),
+    (p) => p.shift(const fp.Offset(-30, 20)),
+    (p) => p.shift(const ui.Offset(-30, 20)),
+    const [
+      fp.Offset(20, 70), // shifted centre
+      fp.Offset(50, 100), // near +x apex inside
+      fp.Offset(10, 30), // bbox corner, outside circle
+      ..._gridFar,
+    ],
+  ),
+  _PathOpCase(
+    'shift by zero is identity',
+    (t) => t
+      ..moveTo(0, 0)
+      ..cubicTo(30, 100, 70, 100, 100, 0)
+      ..close(),
+    (p) => p.shift(fp.Offset.zero),
+    (p) => p.shift(ui.Offset.zero),
+    const [
+      fp.Offset(50, 30),
+      fp.Offset(50, 80),
+      ..._gridFar,
+    ],
+  ),
+];
+
 void main() {
   group('M0 parity vs dart:ui.Path', () {
     for (final c in _cases) {
@@ -1661,6 +1728,28 @@ void main() {
         setUpAll(() {
           fpPath = _buildFp(c.program);
           uiPath = _buildUi(c.program);
+        });
+
+        test('getBounds matches', () {
+          _expectBoundsParity(fpPath.getBounds(), uiPath.getBounds());
+        });
+
+        test('contains agrees on sample points', () {
+          _expectContainsParity(fpPath, uiPath, c.samples);
+        });
+      });
+    }
+  });
+
+  group('Path-level operations vs dart:ui.Path', () {
+    for (final c in _pathOpCases) {
+      group(c.name, () {
+        late fp.Path fpPath;
+        late ui.Path uiPath;
+
+        setUpAll(() {
+          fpPath = c.fpOp(_buildFp(c.program));
+          uiPath = c.uiOp(_buildUi(c.program));
         });
 
         test('getBounds matches', () {

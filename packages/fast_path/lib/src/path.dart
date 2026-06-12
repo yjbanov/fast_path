@@ -1162,6 +1162,26 @@ final class Path {
     return winding != 0;
   }
 
+  /// Returns a copy of this path translated by [offset].
+  ///
+  /// A pure function: the receiver is unchanged and a new [Path] is
+  /// returned. Verb and conic-weight buffers are shared with the
+  /// original (both paths are immutable and never mutate them); only the
+  /// point buffer is allocated and translated.
+  ///
+  /// Behaves identically to `Path.shift` in `dart:ui`.
+  Path shift(Offset offset) {
+    final dx = offset.dx;
+    final dy = offset.dy;
+    final n = _points.length;
+    final newPoints = Float32List(n);
+    for (var i = 0; i < n; i += 2) {
+      newPoints[i] = _points[i] + dx;
+      newPoints[i + 1] = _points[i + 1] + dy;
+    }
+    return Path._(_verbs, newPoints, _conicWeights, fillType);
+  }
+
   /// Returns the signed winding contribution of the directed edge
   /// `(x0, y0) -> (x1, y1)` for a horizontal ray cast from `(px, py)` to
   /// `+x` infinity.

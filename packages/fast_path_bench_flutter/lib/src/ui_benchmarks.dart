@@ -696,3 +696,32 @@ class ArcToPointUi500Benchmark extends FastPathBenchmark {
     sink ^= _path.fillType.index;
   }
 }
+
+/// Mirrors `ShiftPath1kBenchmark`. 1000 `ui.Path.shift` calls.
+class ShiftPathUi1kBenchmark extends FastPathBenchmark {
+  ShiftPathUi1kBenchmark() : super('shift_path_ui_1k');
+
+  late ui.Path _path;
+
+  @override
+  void setup() {
+    _path = ui.Path()..moveTo(0, 0);
+    for (var i = 1; i < 200; i++) {
+      _path.lineTo(i.toDouble(), (i * 1.7) % 50);
+    }
+    _path.close();
+  }
+
+  @override
+  void run() {
+    var acc = 0;
+    for (var i = 0; i < 1000; i++) {
+      final shifted = _path.shift(ui.Offset(i.toDouble(), -i.toDouble()));
+      acc ^= shifted.getBounds().left.toInt();
+    }
+    sink ^= acc;
+  }
+
+  @override
+  int get opsPerRun => 1000;
+}
