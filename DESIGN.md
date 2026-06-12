@@ -430,21 +430,25 @@ ratio-vs-baseline: a >10% regression vs. the previous commit fails the build.
 Rough order of attack. Each milestone is shippable on its own and unblocks
 the next.
 
-1. **M0 — Geometry types, builder/path split, polylines.** `Offset`,
-   `Rect`, `RRect`, `Radius`, `PathFillType`. Both `PathBuilder` and
-   `Path` lands in this milestone, including the `build()` snapshot
-   handoff (§5.4). Builder methods: `moveTo`, `lineTo`, `close`, `reset`,
-   `reserve`, `fillType`. Path methods: `getBounds`, `contains`,
-   `fillType`. Internal verb/point buffer plumbing is shared between the
-   two. The split lands now, not later — retrofitting it after queries
-   are written would be expensive.
-2. **M1 — Curves.** `quadraticBezierTo`, `cubicTo`, `conicTo`, adaptive
-   flattening, tight bounds, contains for curves.
-3. **M2 — Convenience builders.** `addRect`, `addOval`, `addRRect`,
-   `addArc`, `arcTo`, `arcToPoint`, `addPolygon`, `addPath`,
-   `extendWithPath`.
-4. **M3 — Transform + metrics.** `transform`, `shift`, `computeMetrics`,
-   `PathMetric` with length / position / tangent.
+1. **M0 — Geometry types, builder/path split, polylines.** ✅ **Done.**
+   `Offset`, `Rect`, `RRect`, `Radius`, `PathFillType`. Both `PathBuilder`
+   and `Path` landed here, including the `build()` snapshot handoff (§5.4).
+   Builder methods: `moveTo`, `lineTo`, `close`, `reset`, `reserve`,
+   `fillType`, plus `relativeMoveTo`, `relativeLineTo`, `addPolygon`. Path
+   methods: `getBounds`, `contains`, `fillType`, structural `==`/`hashCode`.
+2. **M1 — Curves.** ✅ **Done.** `quadraticBezierTo`, `cubicTo`, `conicTo`
+   (and relative variants). `contains` handles curves via **analytic**
+   root solvers (quadratic / Cardano / trig), not flattening — faster and
+   exact. Note: `getBounds` is **loose** (bbox of control points), matching
+   `dart:ui`/Skia, not the "tight bounds" originally sketched here; the
+   tight variant is deferred (see §6.3). A control-hull quick-reject
+   front-runs every curve solver in `contains`.
+3. **M2 — Convenience builders.** ✅ **Done.** `addRect`, `addOval`,
+   `addRRect`, `addArc`, `arcTo`, `arcToPoint`, `relativeArcToPoint`,
+   `addPath`, `extendWithPath`. Ovals/arcs/rounded-rects decompose into
+   conics; `arcToPoint` uses the SVG endpoint parameterization.
+4. **M3 — Transform + metrics.** 🔨 **In progress.** `shift`, `transform`,
+   `computeMetrics`, `PathMetric` with length / position / tangent.
 5. **M4 — Boolean ops.** `Path.combine(op, a, b)` for all four ops. This is
    the riskiest surface; we ship behind a parity-test gate.
 6. **M5 — Polish.** Convexity heuristics, dartdoc pass, `0.x` → `1.0.0`
