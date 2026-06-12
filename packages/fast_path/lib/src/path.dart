@@ -5,7 +5,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'geometry.dart';
+import 'package:fast_geometry/fast_geometry.dart';
 import 'verbs.dart';
 
 /// Mutable, write-optimized builder for [Path].

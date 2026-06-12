@@ -1,0 +1,19 @@
+name: fast_geometry
+description: Fast, pure-Dart 2D geometry and transforms for UI (Flutter, web, SwiftUI-style layouts), with no dart:ui dependency.
+version: 0.1.0
+repository: https://github.com/yjbanov/fast_path
+issue_tracker: https://github.com/yjbanov/fast_path/issues
+
+resolution: workspace
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  meta: ^1.15.0
+
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.25.0
+  benchmark_harness: ^2.2.2
+  vector_math: ^2.1.4

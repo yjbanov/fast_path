@@ -9,5 +9,5 @@
 /// package README for the rationale.
 library;
 
-export 'src/geometry.dart';
+export 'package:fast_geometry/fast_geometry.dart';
 export 'src/path.dart';

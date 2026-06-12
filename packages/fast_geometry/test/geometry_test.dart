@@ -2,7 +2,7 @@
 // Use of this source code is governed by the BSD-3-Clause license in the
 // project root LICENSE file.
 
-import 'package:fast_path/fast_path.dart';
+import 'package:fast_geometry/fast_geometry.dart';
 import 'package:test/test.dart';
 
 void main() {

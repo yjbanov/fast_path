@@ -12,6 +12,9 @@ resolution: workspace
 environment:
   sdk: ^3.5.0
 
+dependencies:
+  fast_geometry: any
+
 dev_dependencies:
   lints: ^4.0.0
   test: ^1.25.0
