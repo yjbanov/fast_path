@@ -35,6 +35,13 @@
   polylines match to floating-point); tangent positions match within
   0.5 units at equal contour fractions. `metrics_tangents_64` benchmark
   pair added (essentially tied with `dart:ui`).
+- `PathMetric.extractPath(start, end, {startWithMoveTo = true})` returns
+  the portion of a contour between two arc-length distances as a new
+  [Path]. Distances clamp to `[0, length]`; `start >= end` yields an
+  empty path. The extract is the flattened polyline between the two
+  distances (dart:ui preserves curve segments — a documented divergence;
+  the traced geometry and arc length still match within tolerance).
+  `extract_path_32` benchmark pair added.
 
 ### Changed
 

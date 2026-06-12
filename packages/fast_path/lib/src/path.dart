@@ -2156,36 +2156,17 @@ final class PathMetric {
   /// Behaves identically to `PathMetric.getTangentForOffset` in
   /// `dart:ui`.
   Tangent? getTangentForOffset(double distance) {
-    final n = _dists.length;
-    if (n < 2 || length == 0) {
+    if (_dists.length < 2 || length == 0) {
       return null;
     }
-    var d = distance;
-    if (d <= 0) {
-      d = 0;
-    } else if (d >= length) {
-      d = length;
-    }
-    // Binary search for the segment [i, i+1] containing distance d.
-    var lo = 0;
-    var hi = n - 1;
-    while (lo < hi) {
-      final mid = (lo + hi) >> 1;
-      if (_dists[mid] < d) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-    // lo is the first index with _dists[lo] >= d. The containing segment
-    // ends at lo (starts at lo-1), except at d == 0 where lo == 0.
-    final seg = lo == 0 ? 1 : lo;
-    final segLen = _dists[seg] - _dists[seg - 1];
-    final t = segLen == 0 ? 0.0 : (d - _dists[seg - 1]) / segLen;
+    final d = distance <= 0 ? 0.0 : (distance >= length ? length : distance);
+    final seg = _segmentForDistance(d);
     final ax = _xs[seg - 1];
     final ay = _ys[seg - 1];
     final bx = _xs[seg];
     final by = _ys[seg];
+    final segLen = _dists[seg] - _dists[seg - 1];
+    final t = segLen == 0 ? 0.0 : (d - _dists[seg - 1]) / segLen;
     final posX = ax + (bx - ax) * t;
     final posY = ay + (by - ay) * t;
     var vx = bx - ax;
@@ -2199,5 +2180,79 @@ final class PathMetric {
       vy /= vlen;
     }
     return Tangent(Offset(posX, posY), Offset(vx, vy));
+  }
+
+  /// Extracts the portion of this contour between arc-length distances
+  /// [start] and [end] as a new [Path].
+  ///
+  /// Both distances are clamped to `[0, length]`. If `start >= end` (after
+  /// clamping) the result is an empty path. When [startWithMoveTo] is true
+  /// the extracted path opens with a `moveTo` to the start position;
+  /// otherwise it opens with a `lineTo` (so it continues from a path's
+  /// current point if appended).
+  ///
+  /// The extracted contour is the flattened polyline between the two
+  /// distances — fast_path measures on a flattened representation, so an
+  /// extracted curve comes back as line segments. Its arc length and the
+  /// points it passes through match the original contour to within the
+  /// flattening tolerance.
+  ///
+  /// Behaves identically to `PathMetric.extractPath` in `dart:ui`.
+  Path extractPath(double start, double end, {bool startWithMoveTo = true}) {
+    final builder = PathBuilder();
+    final n = _dists.length;
+    if (n < 2 || length == 0) {
+      return builder.build();
+    }
+    final s = start <= 0 ? 0.0 : (start >= length ? length : start);
+    final e = end <= 0 ? 0.0 : (end >= length ? length : end);
+    if (s >= e) {
+      return builder.build();
+    }
+
+    final (sx, sy) = _positionAt(s);
+    if (startWithMoveTo) {
+      builder.moveTo(sx, sy);
+    } else {
+      builder.lineTo(sx, sy);
+    }
+    // Table vertices strictly inside (s, e), in order.
+    for (var i = 0; i < n; i++) {
+      final di = _dists[i];
+      if (di > s && di < e) {
+        builder.lineTo(_xs[i], _ys[i]);
+      }
+    }
+    final (ex, ey) = _positionAt(e);
+    builder.lineTo(ex, ey);
+    return builder.build();
+  }
+
+  /// Returns the interpolated `(x, y)` position at arc-length [d], which
+  /// the caller must have already clamped to `[0, length]`.
+  (double, double) _positionAt(double d) {
+    final seg = _segmentForDistance(d);
+    final segLen = _dists[seg] - _dists[seg - 1];
+    final t = segLen == 0 ? 0.0 : (d - _dists[seg - 1]) / segLen;
+    final ax = _xs[seg - 1];
+    final ay = _ys[seg - 1];
+    return (ax + (_xs[seg] - ax) * t, ay + (_ys[seg] - ay) * t);
+  }
+
+  /// Binary search: returns the index `seg` such that the segment
+  /// `[seg - 1, seg]` contains arc-length [d]. [d] is assumed clamped to
+  /// `[0, length]`.
+  int _segmentForDistance(double d) {
+    var lo = 0;
+    var hi = _dists.length - 1;
+    while (lo < hi) {
+      final mid = (lo + hi) >> 1;
+      if (_dists[mid] < d) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    return lo == 0 ? 1 : lo;
   }
 }

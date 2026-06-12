@@ -32,6 +32,7 @@ import 'src/contains_conics.dart';
 import 'src/contains_cubics.dart';
 import 'src/contains_grid.dart';
 import 'src/contains_quads.dart';
+import 'src/extract_path.dart';
 import 'src/metrics.dart';
 import 'src/path_equality.dart';
 import 'src/path_from_path.dart';
@@ -61,6 +62,7 @@ export 'src/contains_conics.dart';
 export 'src/contains_cubics.dart';
 export 'src/contains_grid.dart';
 export 'src/contains_quads.dart';
+export 'src/extract_path.dart';
 export 'src/metrics.dart';
 export 'src/path_equality.dart';
 export 'src/path_from_path.dart';
@@ -104,6 +106,7 @@ List<FastPathBenchmark> allBenchmarks() => <FastPathBenchmark>[
       ShiftPath1kBenchmark(),
       TransformPath1kBenchmark(),
       Metrics64Benchmark(),
+      ExtractPath32Benchmark(),
       // Conversions (fp-only).
       BuilderFromPath1kBenchmark(),
       BuilderSnapshot1kBenchmark(),

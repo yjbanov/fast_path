@@ -1924,6 +1924,26 @@ void main() {
                       'fp=${ft.position} ui=${ut.position}');
             }
           }
+          // extractPath: pull the same sub-range from each contour (at
+          // matching fractions of its own length) and compare the
+          // extracted sub-path's measured length. Bounds are NOT compared
+          // because dart:ui's extractPath preserves curve segments (loose
+          // bounds, including control points) while fast_path returns a
+          // flattened polyline (tight bounds) — a documented divergence;
+          // the traced geometry, and hence the arc length, still match.
+          final fpExtract =
+              fpm.extractPath(fpm.length * 0.2, fpm.length * 0.6);
+          final uiExtract =
+              uim.extractPath(uim.length * 0.2, uim.length * 0.6);
+          final fpExLen = fpExtract.computeMetrics().isEmpty
+              ? 0.0
+              : fpExtract.computeMetrics().first.length;
+          final uiExLen = uiExtract.computeMetrics().isEmpty
+              ? 0.0
+              : uiExtract.computeMetrics().first.length;
+          expect((fpExLen - uiExLen).abs(),
+              lessThan(5e-3 * uiExLen + 0.1),
+              reason: 'contour $i extract length: fp=$fpExLen ui=$uiExLen');
         }
       });
     }

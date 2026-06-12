@@ -804,3 +804,43 @@ class MetricsUi64Benchmark extends FastPathBenchmark {
     sink ^= acc;
   }
 }
+
+/// Mirrors `ExtractPath32Benchmark`. 32 extractPath calls walking a
+/// curve-heavy `ui.Path` contour (the dashing workload).
+class ExtractPathUi32Benchmark extends FastPathBenchmark {
+  ExtractPathUi32Benchmark() : super('extract_path_ui_32');
+
+  late ui.PathMetric _metric;
+  late double _len;
+
+  @override
+  int get opsPerRun => 32;
+
+  @override
+  void setup() {
+    final p = ui.Path()..moveTo(0, 0);
+    for (var i = 0; i < 16; i++) {
+      final x = (i + 1) * 12.0;
+      p.cubicTo(
+        x - 8, math.sin(i) * 30,
+        x - 4, math.cos(i) * 30,
+        x, (i.isEven ? 10 : -10).toDouble(),
+      );
+    }
+    p.close();
+    _metric = p.computeMetrics().first;
+    _len = _metric.length;
+  }
+
+  @override
+  void run() {
+    var acc = 0;
+    final step = _len / 32;
+    for (var i = 0; i < 32; i++) {
+      final start = i * step;
+      final piece = _metric.extractPath(start, start + step * 0.6);
+      acc ^= piece.getBounds().left.toInt();
+    }
+    sink ^= acc;
+  }
+}

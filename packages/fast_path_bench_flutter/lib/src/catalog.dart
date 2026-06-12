@@ -237,6 +237,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: MetricsUi64Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Extract sub-paths (dashing)',
+        description:
+            '32 extractPath calls walking a curve-heavy contour, the '
+            'dashed-stroke workload.',
+        createFp: fp.ExtractPath32Benchmark.new,
+        createUi: ExtractPathUi32Benchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'getBounds — cached',
         description:
             '1000 calls on a path whose bounds cache is primed. Should '
