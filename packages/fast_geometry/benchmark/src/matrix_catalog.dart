@@ -345,6 +345,47 @@ class _Matrix4Hash extends _LoopBench {
   double step() => _a.hashCode.toDouble();
 }
 
+class _MatrixTranslated extends _LoopBench {
+  _MatrixTranslated(super.name, this._build);
+  final Matrix Function() _build;
+  late Matrix _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.translated(1.5, 2.5).scaleX;
+}
+
+class _Matrix4Translated extends _LoopBench {
+  _Matrix4Translated(super.name, this._build);
+  final Matrix4 Function() _build;
+  late Matrix4 _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() =>
+      _a.multiplied(Matrix4.translationValues(1.5, 2.5, 0)).storage[0];
+}
+
+class _MatrixRotatedZ extends _LoopBench {
+  _MatrixRotatedZ(super.name, this._build);
+  final Matrix Function() _build;
+  late Matrix _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.rotatedZ(0.3).scaleX;
+}
+
+class _Matrix4RotatedZ extends _LoopBench {
+  _Matrix4RotatedZ(super.name, this._build);
+  final Matrix4 Function() _build;
+  late Matrix4 _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.multiplied(Matrix4.rotationZ(0.3)).storage[0];
+}
+
 /// The matrix benchmark catalog: fast_geometry's [Matrix] as the subject,
 /// `package:vector_math`'s `Matrix4` as the reference baseline.
 Catalog matrixCatalog() => Catalog(
@@ -490,6 +531,16 @@ Catalog matrixCatalog() => Catalog(
         BenchmarkEntry(
           subject: () => _MatrixHash('HashCode: complex', _mComplexA),
           reference: () => _Matrix4Hash('HashCode: complex', _m4ComplexA),
+        ),
+
+        // Composition (post-multiplication onto a simple base).
+        BenchmarkEntry(
+          subject: () => _MatrixTranslated('Compose: translated', _mSimpleA),
+          reference: () => _Matrix4Translated('Compose: translated', _m4SimpleA),
+        ),
+        BenchmarkEntry(
+          subject: () => _MatrixRotatedZ('Compose: rotatedZ', _mSimpleA),
+          reference: () => _Matrix4RotatedZ('Compose: rotatedZ', _m4SimpleA),
         ),
       ],
     );

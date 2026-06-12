@@ -455,6 +455,28 @@ final class Matrix {
     }
   }
 
+  /// Returns `this * T`, where `T` is a translation by ([dx], [dy]).
+  ///
+  /// The new transform is applied in `this`'s local space (post-multiplication):
+  /// a point is translated *first*, then transformed by `this`. Equivalent to
+  /// vector_math's in-place `Matrix4.translate`.
+  Matrix translated(double dx, double dy) =>
+      this * Matrix.translation2d(dx: dx, dy: dy);
+
+  /// Returns `this * S`, where `S` is a scale by [sx] (and [sy], defaulting to
+  /// [sx]). Applied in `this`'s local space; equivalent to vector_math's
+  /// in-place `Matrix4.scale`.
+  Matrix scaled(double sx, [double? sy]) => this * Matrix.scale(sx, sy);
+
+  /// Returns `this * R`, where `R` is a Z-rotation by [radians]. Applied in
+  /// `this`'s local space; equivalent to vector_math's in-place
+  /// `Matrix4.rotateZ`.
+  Matrix rotatedZ(double radians) => this * Matrix.rotationZ(radians);
+
+  /// Returns `this * K`, where `K` is a skew by ([alpha], [beta]). Applied in
+  /// `this`'s local space.
+  Matrix skewed(double alpha, double beta) => this * Matrix.skew(alpha, beta);
+
   /// Whether [other] is a [Matrix] with the same 16 entries.
   ///
   /// Relies on the canonical-lowering invariant: equal transforms are always

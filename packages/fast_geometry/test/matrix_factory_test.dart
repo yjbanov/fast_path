@@ -6,27 +6,7 @@ import 'package:fast_geometry/fast_geometry.dart';
 import 'package:test/test.dart';
 import 'package:vector_math/vector_math_64.dart' as vm;
 
-/// All factory results agree with vector_math to this absolute tolerance.
-/// The arithmetic is identical (both use dart:math), so the gap is just
-/// floating-point reassociation; 1e-12 is comfortably loose.
-const double _tol = 1e-12;
-
-/// Asserts [actual]'s 16 entries match [expected]'s within [_tol]. `mRC` is
-/// row R, column C on our side; vector_math exposes the same via `entry(R, C)`.
-void expectMatches(Matrix actual, vm.Matrix4 expected) {
-  final actualRows = <double>[
-    actual.m00, actual.m01, actual.m02, actual.m03, //
-    actual.m10, actual.m11, actual.m12, actual.m13, //
-    actual.m20, actual.m21, actual.m22, actual.m23, //
-    actual.m30, actual.m31, actual.m32, actual.m33, //
-  ];
-  for (var i = 0; i < 16; i++) {
-    final r = i ~/ 4;
-    final c = i % 4;
-    expect(actualRows[i], closeTo(expected.entry(r, c), _tol),
-        reason: 'entry m$r$c');
-  }
-}
+import 'matrix_vm_match.dart';
 
 void main() {
   group('factory canonicalization & shape', () {
