@@ -101,19 +101,25 @@ The current `Matrix` implementation is a proof-of-concept. To make it a fully fe
 
 Unlike `vector_math` which is mutable, `Matrix` is deeply immutable. Therefore, any operations that would conceptually "mutate" a matrix must instead return a new `Matrix` instance.
 
-### 1. Benchmarking & Correctness Foundation
+> **Status (2026-06):** Sections 1–6 are implemented and shipped. Every method
+> has unit tests, entry-by-entry parity tests against `package:vector_math`, and
+> a paired benchmark in the matrix bench catalog. The remaining work is the
+> performance optimization those benchmarks now justify — see
+> [Optimization](#optimization-representation-tuning) below.
+
+### 1. Benchmarking & Correctness Foundation ✅ Done
 Before adding new features, we must establish a rigorous foundation for measuring performance and correctness:
 - **Benchmark Harness**: Create a generalized benchmark harness capable of comparing `fast_path` against Flutter's `dart:ui`, and `fast_geometry`'s `Matrix` against `package:vector_math`'s `Matrix4`.
 - **Baseline Benchmarks**: Write a comprehensive set of benchmarks for all *existing* matrix functionality, comparing it head-to-head with `vector_math`.
 - **Skills Update**: Update or add AI guidance skills (similar to the existing `fast_path` skills) to cover both packages. These skills will ensure that all new functionality is implemented correctly, well-tested, and rigorously benchmarked.
 
-### 2. Equality & Debugging
+### 2. Equality & Debugging ✅ Done
 Basic object overrides are currently missing and are essential for testing and UI state comparison.
 - `operator ==(Object other)`: Implement a structural equality check (fast-pathing with `identical`).
 - `int get hashCode`: Compute a hash over the 16 matrix elements (optimizing for the `_rest == null` case).
 - `String toString()`: Output a formatted 4x4 grid representation.
 
-### 3. Factory Constructors
+### 3. Factory Constructors ✅ Done
 Add factory constructors for common transformations that we currently lack:
 - `Matrix.rotationZ(double radians)`
 - `Matrix.rotationX(double radians)`
@@ -123,18 +129,54 @@ Add factory constructors for common transformations that we currently lack:
 - `Matrix.orthographic(double left, double right, double bottom, double top, double near, double far)`
 - `Matrix.perspective(double fovYRadians, double aspectRatio, double zNear, double zFar)`
 
-### 4. Transformation Methods (Composition)
+### 4. Transformation Methods (Composition) ✅ Done
 Since the matrix is immutable, we will add methods that compose a new transformation onto the current matrix (`this * new_transform`) and return the result:
 - `Matrix translated(double dx, double dy)`
 - `Matrix scaled(double sx, [double? sy])`
 - `Matrix rotatedZ(double radians)`
 - `Matrix skewed(double alpha, double beta)`
 
-### 5. Geometry Transformation
+### 5. Geometry Transformation ✅ Done
 The core utility of a matrix is transforming geometry. We will add methods to transform `fast_geometry` types, utilizing our shape-encoded fast paths:
 - `Offset transformPoint(Offset point)`: Fast-paths for `isTranslation2d` and `isSimple2d`.
 - `Rect transformRect(Rect rect)`: Transforms the corners and computes the bounding box. Fast-paths for `isSimple2d` (just scale/translate the left/top/right/bottom edges).
 - `Offset transformVector(Offset vector)`: Transforms ignoring translation.
 
-### 6. Matrix Operations
+### 6. Matrix Operations ✅ Done
 - `Matrix transposed()`: Returns a new matrix with the rows and columns swapped.
+
+## Optimization: Representation Tuning
+
+With the full API in place (sections 1–6) and benchmarked head-to-head against
+`Matrix4`, the numbers reveal a consistent pattern: `Matrix` wins on the
+identity / translation / simple-scale fast paths but **trails `Matrix4` whenever
+the operation touches the `_rest` extension or allocates**. Representative
+JIT figures (subject = `fast_geometry`, lower `speedup` is worse):
+
+| Operation | speedup vs Matrix4 | Cause |
+| --- | --- | --- |
+| Multiply: complex × complex | 0.40x | general `_rest` path |
+| Add: complex + complex | 0.24x | `_rest` padding via identity extension |
+| HashCode: complex | 0.48x | nested `Object.hash` over core + 12 extension fields |
+| transformPoint (general) | 0.53x | `_rest` reads + `Offset` allocation |
+| transformRect (general) | 0.17x | an `Offset` allocated per corner |
+| Factory: scale / rotationZ | 0.52–0.75x | result allocation + lowering branches |
+
+Two structural causes, two candidate fixes:
+
+1. **The 2D-affine case spills to `_rest`.** Today the inline core is four
+   doubles (`_m00, _m11, _m03, _m13`) — diagonal scale plus 2D translation.
+   Rotation, skew, and every general 2D transform set `m01`/`m10`, so they
+   allocate and read through the 12-double extension. Widening the inline core
+   to **six doubles** (full 2D affine: `m00, m01, m10, m11, m03, m13`) would keep
+   the entire 2D-affine class — the common UI case — allocation-light and
+   `_rest`-free, pushing only the genuine 3D tail into the extension. This is the
+   decision the `add-matrix-api` skill flags as escalate-only; the now-complete
+   §2–§6 are the constraints it must satisfy.
+2. **Geometry transforms allocate per result.** `transformPoint` allocates an
+   `Offset`; `transformRect` allocates four. Allocation-free internal helpers
+   (writing to locals / out-params) would close the `transformRect` gap, which
+   is the worst single result in the suite.
+
+The full benchmark suite is the fixed target: any representation change must
+hold or improve every pair, not just the ones it targets.
