@@ -386,6 +386,74 @@ class _Matrix4RotatedZ extends _LoopBench {
   double step() => _a.multiplied(Matrix4.rotationZ(0.3)).storage[0];
 }
 
+class _MatrixTransformPoint extends _LoopBench {
+  _MatrixTransformPoint(super.name, this._build);
+  final Matrix Function() _build;
+  late Matrix _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.transformPoint(const Offset(1.5, 2.5)).dx;
+}
+
+class _Matrix4TransformPoint extends _LoopBench {
+  _Matrix4TransformPoint(super.name, this._build);
+  final Matrix4 Function() _build;
+  late Matrix4 _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.transform3(Vector3(1.5, 2.5, 0)).x;
+}
+
+class _MatrixTransformVector extends _LoopBench {
+  _MatrixTransformVector(super.name, this._build);
+  final Matrix Function() _build;
+  late Matrix _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.transformVector(const Offset(1.5, 2.5)).dx;
+}
+
+class _Matrix4TransformVector extends _LoopBench {
+  _Matrix4TransformVector(super.name, this._build);
+  final Matrix4 Function() _build;
+  late Matrix4 _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.transformed(Vector4(1.5, 2.5, 0, 0)).x;
+}
+
+class _MatrixTransformRect extends _LoopBench {
+  _MatrixTransformRect(super.name, this._build);
+  final Matrix Function() _build;
+  late Matrix _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() =>
+      _a.transformRect(const Rect.fromLTRB(0, 0, 10, 10)).left;
+}
+
+class _Matrix4TransformRect extends _LoopBench {
+  _Matrix4TransformRect(super.name, this._build);
+  final Matrix4 Function() _build;
+  late Matrix4 _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() {
+    final Matrix4 m = _a;
+    final v0 = m.transform3(Vector3(0, 0, 0));
+    final v1 = m.transform3(Vector3(10, 0, 0));
+    final v2 = m.transform3(Vector3(10, 10, 0));
+    final v3 = m.transform3(Vector3(0, 10, 0));
+    return math.min(math.min(v0.x, v1.x), math.min(v2.x, v3.x));
+  }
+}
+
 /// The matrix benchmark catalog: fast_geometry's [Matrix] as the subject,
 /// `package:vector_math`'s `Matrix4` as the reference baseline.
 Catalog matrixCatalog() => Catalog(
@@ -541,6 +609,25 @@ Catalog matrixCatalog() => Catalog(
         BenchmarkEntry(
           subject: () => _MatrixRotatedZ('Compose: rotatedZ', _mSimpleA),
           reference: () => _Matrix4RotatedZ('Compose: rotatedZ', _m4SimpleA),
+        ),
+
+        // Geometry transformation (general base, so both sides do real work).
+        BenchmarkEntry(
+          subject: () =>
+              _MatrixTransformPoint('Transform: point', _mComplexA),
+          reference: () =>
+              _Matrix4TransformPoint('Transform: point', _m4ComplexA),
+        ),
+        BenchmarkEntry(
+          subject: () =>
+              _MatrixTransformVector('Transform: vector', _mComplexA),
+          reference: () =>
+              _Matrix4TransformVector('Transform: vector', _m4ComplexA),
+        ),
+        BenchmarkEntry(
+          subject: () => _MatrixTransformRect('Transform: rect', _mComplexA),
+          reference: () =>
+              _Matrix4TransformRect('Transform: rect', _m4ComplexA),
         ),
       ],
     );

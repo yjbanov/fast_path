@@ -7,6 +7,8 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
+import 'geometry.dart';
+
 @immutable
 final class Matrix {
   /// The identity transform.
@@ -476,6 +478,77 @@ final class Matrix {
   /// Returns `this * K`, where `K` is a skew by ([alpha], [beta]). Applied in
   /// `this`'s local space.
   Matrix skewed(double alpha, double beta) => this * Matrix.skew(alpha, beta);
+
+  /// Transforms [point] (treated as `(x, y, 0, 1)`) by this matrix.
+  ///
+  /// Applies the perspective divide when the matrix is not affine
+  /// ([isAffine2d] is false). Numerically matches vector_math's
+  /// `Matrix4.perspectiveTransform` on `Vector3(x, y, 0)`.
+  Offset transformPoint(Offset point) {
+    final double x = point.dx;
+    final double y = point.dy;
+    final _MatrixExtension? rest = _rest;
+    if (rest == null) {
+      // simple2d (incl. translation/identity): no shear, no perspective.
+      return Offset(_m00 * x + _m03, _m11 * y + _m13);
+    }
+    final double nx = _m00 * x + rest._m01 * y + _m03;
+    final double ny = rest._m10 * x + _m11 * y + _m13;
+    if (rest._m30 == 0.0 && rest._m31 == 0.0 && rest._m33 == 1.0) {
+      // Affine: w is identically 1, so skip the divide.
+      return Offset(nx, ny);
+    }
+    final double w = rest._m30 * x + rest._m31 * y + rest._m33;
+    final double invW = 1.0 / w;
+    return Offset(nx * invW, ny * invW);
+  }
+
+  /// Transforms [vector] as a direction (treated as `(x, y, 0, 0)`), ignoring
+  /// translation and perspective.
+  Offset transformVector(Offset vector) {
+    final double x = vector.dx;
+    final double y = vector.dy;
+    final _MatrixExtension? rest = _rest;
+    if (rest == null) {
+      return Offset(_m00 * x, _m11 * y);
+    }
+    return Offset(_m00 * x + rest._m01 * y, rest._m10 * x + _m11 * y);
+  }
+
+  /// Transforms [rect] and returns the axis-aligned bounding box of the result.
+  ///
+  /// For a [isSimple2d] matrix the result is exact (the rectangle stays
+  /// axis-aligned); the two opposite corners are transformed and reordered to
+  /// absorb negative scales. For a general matrix all four corners are
+  /// transformed (with the perspective divide where applicable) and bounded.
+  Rect transformRect(Rect rect) {
+    final _MatrixExtension? rest = _rest;
+    if (rest == null) {
+      final double x1 = _m00 * rect.left + _m03;
+      final double y1 = _m11 * rect.top + _m13;
+      final double x2 = _m00 * rect.right + _m03;
+      final double y2 = _m11 * rect.bottom + _m13;
+      return Rect.fromLTRB(
+        math.min(x1, x2),
+        math.min(y1, y2),
+        math.max(x1, x2),
+        math.max(y1, y2),
+      );
+    }
+    final Offset p0 = transformPoint(Offset(rect.left, rect.top));
+    final Offset p1 = transformPoint(Offset(rect.right, rect.top));
+    final Offset p2 = transformPoint(Offset(rect.right, rect.bottom));
+    final Offset p3 = transformPoint(Offset(rect.left, rect.bottom));
+    final double minX =
+        math.min(math.min(p0.dx, p1.dx), math.min(p2.dx, p3.dx));
+    final double minY =
+        math.min(math.min(p0.dy, p1.dy), math.min(p2.dy, p3.dy));
+    final double maxX =
+        math.max(math.max(p0.dx, p1.dx), math.max(p2.dx, p3.dx));
+    final double maxY =
+        math.max(math.max(p0.dy, p1.dy), math.max(p2.dy, p3.dy));
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
 
   /// Whether [other] is a [Matrix] with the same 16 entries.
   ///

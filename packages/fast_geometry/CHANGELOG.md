@@ -14,3 +14,7 @@
   `skewed`, each returning `this * factory(...)` — the new transform applied in
   the receiver's local space (post-multiplication), matching vector_math's
   in-place `translate`/`scale`/`rotateZ`.
+- `Matrix`: added geometry transforms `transformPoint`, `transformVector`, and
+  `transformRect` (returning `fast_geometry`'s `Offset`/`Rect`). They fast-path
+  `isSimple2d` matrices, apply the perspective divide when not affine, and are
+  parity-tested against `package:vector_math`.
