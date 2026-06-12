@@ -447,8 +447,13 @@ the next.
    `addRRect`, `addArc`, `arcTo`, `arcToPoint`, `relativeArcToPoint`,
    `addPath`, `extendWithPath`. Ovals/arcs/rounded-rects decompose into
    conics; `arcToPoint` uses the SVG endpoint parameterization.
-4. **M3 — Transform + metrics.** 🔨 **In progress.** `shift`, `transform`,
-   `computeMetrics`, `PathMetric` with length / position / tangent.
+4. **M3 — Transform + metrics.** ✅ **Done.** `shift`, `transform` (affine
+   + perspective, point-mapping verified against the engine), plus
+   `computeMetrics` / `PathMetrics` / `PathMetric` (`length`, `isClosed`,
+   `getTangentForOffset`, `extractPath`) and `Tangent`. Metrics flatten
+   each contour to a cumulative arc-length table. `addPath` /
+   `extendWithPath` were rewritten onto the shared transform machinery
+   (bulk buffer copy), and now support perspective.
 5. **M4 — Boolean ops.** `Path.combine(op, a, b)` for all four ops. This is
    the riskiest surface; we ship behind a parity-test gate.
 6. **M5 — Polish.** Convexity heuristics, dartdoc pass, `0.x` → `1.0.0`

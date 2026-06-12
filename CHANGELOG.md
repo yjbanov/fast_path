@@ -4,256 +4,131 @@
 
 ### Added
 
-- M3 begins — `Path.shift(Offset)`: a pure function returning a new
-  translated [Path]. Verb and conic-weight buffers are shared with the
-  original (both immutable, never mutated), so only the point buffer is
-  allocated and translated. Parity verified via a new Path-level
-  operation harness in the conformance suite. `shift_path_1k` benchmark
-  pair added.
-- `Path.transform(Float64List matrix4)`: pure function returning a new
-  path with every point mapped through a column-major 4×4 matrix. Affine
-  fast path (no per-point divide); perspective matrices apply the
-  homogeneous divide per point. Verbs and conic weights are preserved
-  unchanged under both — a probe against the engine confirmed dart:ui
-  keeps the verb structure and conic weights and merely relocates
-  control points, even under perspective (it does NOT recompute conic
-  weights the way classic Skia's SkConic::TransformW would). Parity
-  covers scale, 90° rotation, perspective-on-quad, and perspective-on-
-  conic. `transform_path_1k` benchmark pair added.
-
-- `Path.computeMetrics({bool forceClosed = false})` returning
-  `PathMetrics` (an iterable of `PathMetric`), plus the `PathMetric` and
-  `Tangent` types. Each contour is flattened to a polyline with a
-  cumulative arc-length table (adaptive curve subdivision, including a
-  rational de Casteljau split for conics). `PathMetric` exposes `length`,
-  `isClosed`, `contourIndex`, and `getTangentForOffset(distance)` (binary
-  search + interpolation, distance clamped to `[0, length]`). `Tangent`
-  exposes `position`, `vector`, `angle` (negated `atan2`, matching the
-  engine), and `Tangent.fromAngle`. Unlike `dart:ui`'s one-shot
-  `PathMetrics`, ours is re-iterable (the path is immutable). Length
-  parity holds to ~0.5% (arc length is an approximation on both sides;
-  polylines match to floating-point); tangent positions match within
-  0.5 units at equal contour fractions. `metrics_tangents_64` benchmark
-  pair added (essentially tied with `dart:ui`).
-- `PathMetric.extractPath(start, end, {startWithMoveTo = true})` returns
-  the portion of a contour between two arc-length distances as a new
-  [Path]. Distances clamp to `[0, length]`; `start >= end` yields an
-  empty path. The extract is the flattened polyline between the two
-  distances (dart:ui preserves curve segments — a documented divergence;
-  the traced geometry and arc length still match within tolerance).
-  `extract_path_32` benchmark pair added.
-
-### Changed
-
-- `PathBuilder.addRRect` now starts its contour at `(left, bottom −
-  blRadius)` and winds clockwise up the left edge first, matching the
-  start vertex and direction of `dart:ui.Path.addRRect` / Skia. The
-  filled shape is unchanged (contains/bounds are start-independent), but
-  the traversal now lines up segment-for-segment — which `computeMetrics`
-  made observable. Surfaced and fixed while adding metric parity.
-- `PathBuilder.addPath` / `extendWithPath` rewritten from replaying the
-  source's verbs through the public builder methods to a bulk
-  buffer-copy with an in-place point transform (translate / affine /
-  perspective branches; conic weights and verb bytes copied directly).
-  On the `add_path_100` benchmark (Flutter desktop AOT) this cut the
-  per-run cost from 38.7 µs to 16.7 µs (−57%), and `extend_with_path`
-  flipped from +43% slower than `dart:ui` to 39% faster. Perspective
-  matrices are now supported (the M2 `UnimplementedError` is gone);
-  see `addPath`'s doc for the one perspective-plus-non-zero-offset
-  corner that still diverges from the engine.
-
-
-- M2 begins — `PathBuilder.addRect(Rect)`: closed rectangular contour,
-  clockwise from the top-left corner. Parity cases include nested
-  same-direction rects (winding direction check) under both fill rules.
-  `add_rects_500` benchmark pair added.
-- `PathBuilder.addOval(Rect)`: four quarter-ellipse conics (weight
-  √2/2) wound clockwise from the right edge midpoint, control points at
-  the rect corners so loose bounds equal the oval rect — same
-  representation as Skia. Parity cases discriminate circle membership
-  by radius (catching any polygonal approximation) and verify the
-  evenOdd annulus. `add_ovals_500` benchmark pair added.
-- `PathBuilder.addRRect(RRect)`: straight edges joined by conic corner
-  arcs. Radii normalize the way Skia's `SkRRect::scaleRadii` does —
-  negatives clamp to zero; when adjacent radii overflow an edge, all
-  radii scale down uniformly by the largest factor that fits every
-  edge. Zero-radius corners stay sharp. Parity covers uniform radii,
-  oversized radii (stadium shape), and per-corner elliptical radii.
-  `add_rrects_500` benchmark pair added.
-- `PathBuilder.arcTo(Rect, startAngle, sweepAngle, forceMoveTo)` and
-  `PathBuilder.addArc(Rect, startAngle, sweepAngle)`: elliptical arcs
-  chopped into ≤90° conic segments (weight cos(halfSweep), control at
-  the tangent intersection). `forceMoveTo` chooses between starting a
-  fresh contour and joining with a line from the current point. Sweeps
-  clamp to ±2π (verified against dart:ui with a 3π parity case).
-  `add_arcs_500` benchmark pair added.
-- `PathBuilder.addPath(Path, Offset, {Float64List? matrix4})` and
-  `PathBuilder.extendWithPath(...)`: append another path's contours,
-  translated and optionally transformed by an affine matrix (the offset
-  applies after the matrix, matching the engine). `extendWithPath`
-  turns the source's first `moveTo` into a `lineTo` join when the
-  builder already has a contour. Conic weights pass through unchanged
-  (affine-invariant). Perspective matrices throw `UnimplementedError`
-  (documented; planned alongside M3's `Path.transform`). `add_path_100`
-  and `extend_with_path_100` benchmark pairs added.
-- M2 complete — `PathBuilder.arcToPoint(Offset, {radius, rotation,
-  largeArc, clockwise})` and `relativeArcToPoint`: SVG endpoint
-  parameterization (spec F.6.5) converted to center form, emitted as
-  rotated-conic segments. `rotation` is in degrees (verified against
-  the engine empirically). Degenerate handling per the SVG rules: zero
-  or non-finite radius → straight line; undersized radii scale up
-  uniformly; identical endpoints → no-op. `arc_to_point_500` benchmark
-  pair added.
-
-
-- M1 complete (all curve verbs) — `PathBuilder.quadraticBezierTo`,
-  `relativeQuadraticBezierTo`, `cubicTo`, `relativeCubicTo`, `conicTo`,
-  and `relativeConicTo`. All match `dart:ui.Path` semantics including
-  implicit-`moveTo` and post-`close` fresh-contour behavior.
-- `conicTo` weight normalization matches *observed* current `dart:ui`
-  (Impeller) behavior, verified empirically with a probe program:
-  invalid weights (`w <= 0`, NaN, infinity) become a plain quadratic
-  through the same control point. Note this differs from classic Skia
-  documentation (which converts `w <= 0` to a line); a weight of
-  exactly 1 is also stored as a quadratic since the two are
-  geometrically identical.
-- `Path.contains` learned the `verbQuad`, `verbConic`, and `verbCubic`
-  cases via analytic root solvers. Quad solves a quadratic in `t`
-  directly. Conic multiplies through by its (strictly positive)
-  denominator, yielding the same quadratic shape with weighted
-  coefficients and a rational `x(t)`. Cubic uses depression + Cardano
-  (one real root) or trigonometric form (three real roots), with
-  explicit fallbacks for the quadratic / linear / constant degenerate
-  cases when the leading coefficient vanishes. For each root
-  `t ∈ [0, 1]` the same per-root helper applies the half-open endpoint
-  tie-break and `x(t) > px` filter; tangent crossings (`y'(t) = 0`)
-  contribute nothing. Records `(winding, crossingCount)` so both
-  nonZero and evenOdd fill rules remain accurate across curve segments.
-- 7 quad, 7 cubic, and 7 conic parity cases in
-  `fast_path_conformance/test/parity/`. All pass against `dart:ui.Path`.
-- `build_quads_500`, `build_conics_500`, and `build_cubics_500`
-  (per-frame builder reuse with 500 curve segments each);
-  `contains_quads_grid_1024`, `contains_conics_grid_1024`, and
-  `contains_cubics_grid_1024` (1024 contains queries against curve-
-  heavy fixtures). All have `dart:ui` counterparts; the catalog wires
-  them as `PairedBenchmark` entries.
-
-### Changed
-
-- `Path.contains` rejects curve segments cheaply before invoking the
-  analytic solvers: if the query's y is strictly outside the segment's
-  control-hull y-range, or px is at/beyond the hull's max x, the
-  segment cannot contribute a crossing and the solver is skipped. On
-  the 1024-query grid benchmarks (AOT) this cut quad contains by 33%,
-  conic by 24%, and cubic by 75% — flipping cubic contains from 2.6×
-  slower than `dart:ui` to 32% faster.
-- `Path.getBounds` semantics clarified in the implementation comment:
-  it returns **loose** bounds (bbox of every stored point, including
-  off-curve control points). This matches `dart:ui.Path.getBounds()`
-  and Skia's `SkPath::getBounds()`; the tight alternative
-  (`computeTightBounds`-style) is deferred to a future API addition
-  if a caller needs it.
-- `Path.contains` quad handling: replaced an initial recursive-
-  flattening implementation with the analytic solver described above.
-  On the `contains_quads_grid_1024` benchmark (Flutter desktop AOT,
-  macOS arm64), the per-query cost dropped from 2.33 µs (5× slower
-  than `dart:ui`) to 398 ns (13% faster than `dart:ui`) — the no-FFI
-  advantage now applies to curve queries as well as line queries.
-
-- `packages/fast_path_bench/` — pure-Dart benchmark package backed by
-  `package:benchmark_harness`. Each benchmark XORs its result into a sink
-  that the runner observes after `measure()`, so JIT/AOT dead-code
-  elimination cannot silently invalidate the numbers. M0 surface now has
-  comprehensive coverage:
-  - Construction: `build_polyline_1k` (per-frame reuse),
-    `build_polyline_cold_1k` (fresh builder per iter), `add_polygon_1k`
-    (convenience API), `relative_polyline_1k` (relativeMoveTo /
-    relativeLineTo), `path_from_path_1k` (PathBuilder.from reseed).
-  - Queries: `contains_grid_1024`, `bounds_warm_1k`, `bounds_cold_1k`.
-  - Conversions (fp-only — dart:ui has no separate builder):
-    `builder_from_path_1k` (Path → PathBuilder copy), `builder_snapshot_1k`
-    (PathBuilder → Path snapshot), `builder_clone_1k` (PathBuilder →
-    PathBuilder clone). Each isolates one direction so the existing
-    `path_from_path_1k` round-trip can be attributed to its parts.
-  - Identity: `path_equality_1k` (deep structural compare; no dart:ui
-    counterpart since `ui.Path` uses identity equality).
-- `bin/run_all.dart` runs every benchmark and prints either a
-  human-readable table (default) or a JSON report (`--json`). The JSON
-  format is the contract that future AOT / dart2js / dart2wasm runners
-  will share.
-- `tool/bench.sh` — supports `--mode=jit` (default, `dart run`),
-  `--mode=aot` (compiles `bin/run_all.dart` to `build/run_all_aot` via
-  `dart compile exe`, then runs it), and `--mode=flutter-desktop`
-  (compiles + runs the Flutter desktop app via `flutter run --release`
-  on macOS or Linux, then greps the canonical JSON out of the
-  surrounding banner). The mode label is forwarded into the benchmark's
-  own JSON metadata. dart2js / dart2wasm modes will plug in as
-  additional cases on this same switch.
-- `packages/fast_path_bench_flutter/` — Flutter-hosted bench app. Brings
-  `dart:ui.Path` benchmarks alongside the existing fast_path ones so a
-  single run produces side-by-side numbers. Desktop builds run benches
-  at startup, write JSON to stdout, and exit (a platform window flashes
-  briefly — Cocoa / GTK create it before Dart's `main()` runs). Web
-  builds present a "Run benchmarks" button; results render on screen
-  and `print()` to the browser console. To run the web suite manually:
-  `cd packages/fast_path_bench_flutter && flutter run -d chrome --release`.
-- `lib/src/catalog.dart` introduces a structured catalog: `PairedBenchmark`
-  for workloads with both a fast_path and a `dart:ui` implementation,
-  `SoloBenchmark` for fast_path-only features. The Flutter UI groups
-  cards by category; the catalog also drives the JSON output (results
-  are now emitted in pair-adjacent order, fp/ui interleaved).
-
-### Changed
-
-- `fast_path_bench_flutter` web UI replaced the raw JSON dump with
-  Material 3 cards. Paired benchmarks show fast_path on the left and
-  `dart:ui` on the right separated by a `VerticalDivider`, with a delta
-  badge on the fast_path side ("−39% vs dart:ui" in green when winning,
-  red when losing). Solo benchmarks render as a single-value card. The
-  canonical JSON is still `print()`-ed to the browser console for
-  copy-paste.
-- `PathBuilder.relativeMoveTo`, `PathBuilder.relativeLineTo`, and
-  `PathBuilder.addPolygon` round out the M0 builder surface to match
-  `dart:ui.Path`.
-- Conformance corpus expanded with relative-method, `addPolygon`, and
-  post-close mutation cases (40 conformance tests total).
-
-### Changed
-
-- `tool/check.sh` now passes `--offline` to `dart pub get` and `--no-pub`
-  to `flutter test`. Both skip a network round-trip / re-resolution that
-  the workspace doesn't need on every check; total local check time stays
-  in the ~3 s range despite the new bench package.
-- CI's Flutter step also passes `--no-pub` for the same reason (the
-  workspace is already resolved by the preceding `dart pub get`).
-
-### Fixed
-
-- `PathBuilder.lineTo` (and the new `relativeLineTo`) after `close` now
-  inject an implicit `moveTo` at the just-closed contour's start, matching
-  Skia / `dart:ui.Path` behavior. Previously the verb stream silently
-  extended the closed contour, which produced subtly different `contains`
-  results on shapes that mixed `close` with subsequent line segments.
-- `PathBuilder.close` is now idempotent — repeated calls with no
-  intervening mutation no longer emit duplicate `close` verbs.
-
 - M0 — geometry types and the builder/path split.
   - Geometry value types: `Offset`, `Size`, `Rect`, `Radius`, `RRect`,
     `PathFillType`.
   - `PathBuilder` with `moveTo`, `lineTo`, `close`, `reset`, `reserve`,
     `fillType`, plus `from` / `fromBuilder` constructors and the
-    snapshot `build()` handoff.
+    snapshot `build()` handoff. `relativeMoveTo`, `relativeLineTo`, and
+    `addPolygon` round out the M0 builder surface.
   - `Path` with `getBounds`, `contains` (nonZero and evenOdd), `fillType`,
     structural equality, and a cached `hashCode`.
-- `fast_path_conformance` package with the first M0 parity tests against
-  `dart:ui.Path`. 12 path programs replayed on both sides; `getBounds`
-  agreement within the DESIGN.md §8.2 tolerances and `contains` agreement
-  on hand-picked sample points.
+- `fast_path_conformance` package with parity tests against `dart:ui.Path`:
+  path programs replayed on both sides, comparing `getBounds` within the
+  DESIGN.md §8.2 tolerances and `contains` on hand-picked sample points.
 - `tool/check.sh` runs analyzer, dart tests, and conformance tests across
-  the workspace, with per-phase timings. Suite currently completes in
-  ~3.5 s locally — keep it that way.
-- GitHub Actions CI workflow at `.github/workflows/ci.yaml` mirroring the
-  same steps.
+  the workspace with per-phase timings (~3.5 s locally). GitHub Actions
+  CI at `.github/workflows/ci.yaml` mirrors the same steps.
+- `packages/fast_path_bench/` — pure-Dart benchmark package backed by
+  `package:benchmark_harness`. Each benchmark XORs its result into a sink
+  the runner observes after `measure()`, so JIT/AOT dead-code elimination
+  cannot silently invalidate the numbers. `bin/run_all.dart` prints a
+  human-readable table or, with `--json`, the canonical JSON report.
+- `tool/bench.sh` supports `--mode=jit` (default), `--mode=aot`
+  (`dart compile exe`), and `--mode=flutter-desktop` (Flutter desktop
+  `--release`, comparing against `dart:ui`). dart2js / dart2wasm modes
+  plug into the same switch later.
+- `packages/fast_path_bench_flutter/` — Flutter-hosted bench app that runs
+  the fast_path benches alongside `dart:ui.Path` counterparts. Desktop
+  builds emit JSON and exit; web builds present a "Run benchmarks" button.
+  `lib/src/catalog.dart` is the single source of truth: `PairedBenchmark`
+  for workloads with a `dart:ui` mirror, `SoloBenchmark` for
+  fast_path-only ones.
+- M1 — curves. `PathBuilder.quadraticBezierTo`,
+  `relativeQuadraticBezierTo`, `cubicTo`, `relativeCubicTo`, `conicTo`,
+  and `relativeConicTo`, all matching `dart:ui.Path` semantics (implicit
+  `moveTo`, post-`close` fresh-contour behavior).
+  - `conicTo` weight normalization matches *observed* current `dart:ui`
+    (Impeller) behavior, verified empirically: invalid weights
+    (`w <= 0`, NaN, infinity) become a plain quadratic through the same
+    control point. This differs from classic Skia docs (which convert
+    `w <= 0` to a line); `w == 1` is also stored as a quadratic.
+  - `Path.contains` handles `verbQuad`, `verbConic`, and `verbCubic` via
+    analytic root solvers (quadratic; conic multiplied through by its
+    positive denominator; cubic by depression + Cardano / trig form with
+    quadratic / linear / constant fallbacks). Half-open endpoint
+    tie-break, tangent crossings ignored, `(winding, crossingCount)`
+    tracked so both fill rules stay accurate.
+  - Benchmarks: `build_quads_500`, `build_conics_500`, `build_cubics_500`,
+    `contains_quads_grid_1024`, `contains_conics_grid_1024`,
+    `contains_cubics_grid_1024`, all with `dart:ui` counterparts.
+- M2 — convenience builders, all with parity cases and benchmark pairs.
+  - `addRect(Rect)`: closed rectangle, clockwise from top-left.
+  - `addOval(Rect)`: four quarter-ellipse conics (weight √2/2), control
+    points at the rect corners so loose bounds equal the oval rect.
+  - `addRRect(RRect)`: edges + conic corners, with Skia's `scaleRadii`
+    normalization (negatives clamp to zero; oversized adjacent radii
+    scale down uniformly).
+  - `arcTo(Rect, startAngle, sweepAngle, forceMoveTo)` and
+    `addArc(Rect, startAngle, sweepAngle)`: elliptical arcs chopped into
+    ≤90° conics, sweeps clamped to ±2π.
+  - `addPath(Path, Offset, {matrix4})` and `extendWithPath(...)`: append
+    another path's contours, transformed and translated.
+  - `arcToPoint(Offset, {radius, rotation, largeArc, clockwise})` and
+    `relativeArcToPoint`: SVG endpoint parameterization (spec F.6.5);
+    `rotation` is in degrees (verified empirically).
+- M3 — transforms and metrics.
+  - `Path.shift(Offset)`: pure-function translate; shares verb/weight
+    buffers with the original, allocates only the point buffer.
+    `shift_path_1k` benchmark pair.
+  - `Path.transform(Float64List matrix4)`: maps every point through a
+    column-major 4×4 matrix (affine fast path; perspective applies the
+    homogeneous divide). Verbs and conic weights preserved unchanged
+    under both — a probe confirmed `dart:ui` does the same even under
+    perspective (it does not recompute conic weights). `transform_path_1k`
+    benchmark pair.
+  - `Path.computeMetrics({forceClosed})` → `PathMetrics` (re-iterable,
+    unlike `dart:ui`'s one-shot), plus `PathMetric` (`length`, `isClosed`,
+    `contourIndex`, `getTangentForOffset`) and `Tangent` (`position`,
+    `vector`, `angle`, `fromAngle`). Contours flatten to a cumulative
+    arc-length table (adaptive subdivision incl. rational de Casteljau
+    for conics). Length parity ~0.5%; tangent positions within 0.5 at
+    equal fractions. `metrics_tangents_64` benchmark pair (≈ tied).
+  - `PathMetric.extractPath(start, end, {startWithMoveTo})`: the sub-path
+    between two arc-length distances (flattened polyline; `dart:ui`
+    preserves curves — a documented divergence, lengths still match).
+    `extract_path_32` benchmark pair.
+
+### Changed
+
+- `Path.contains` rejects curve segments via a control-hull bound before
+  invoking the analytic solver: if the ray's y is outside the segment's
+  control-hull y-range, or px is past its max x, the solver is skipped.
+  AOT: quad contains −33%, conic −24%, cubic −75% (flipping cubic from
+  2.6× slower than `dart:ui` to 32% faster).
+- `Path.contains` quad handling replaced an initial recursive-flattening
+  implementation with the analytic solver (the `contains_quads_grid_1024`
+  per-query cost dropped from 2.33 µs to 398 ns — from 5× slower than
+  `dart:ui` to 13% faster).
+- `Path.getBounds` documented as returning **loose** bounds (bbox of all
+  stored points, including control points), matching `dart:ui` / Skia; a
+  tight variant is deferred.
+- `PathBuilder.addRRect` starts its contour at `(left, bottom − blRadius)`
+  winding clockwise, matching `dart:ui` / Skia's start vertex and
+  direction. The filled shape is unchanged; the traversal now lines up
+  segment-for-segment (surfaced by `computeMetrics`).
+- `PathBuilder.addPath` / `extendWithPath` rewritten from verb-replay to a
+  bulk buffer-copy with an in-place point transform (translate / affine /
+  perspective branches). `add_path_100` AOT 38.7 µs → 16.7 µs (−57%);
+  `extend_with_path` flipped from +43% vs `dart:ui` to −39%. Perspective
+  matrices are now supported (the M2 `UnimplementedError` is gone); see
+  `addPath`'s doc for the perspective-plus-non-zero-offset corner that
+  still diverges.
+- `fast_path_bench_flutter` web UI uses Material 3 cards (fast_path vs
+  `dart:ui` split by a `VerticalDivider`, delta badge on the fast_path
+  side) instead of a raw JSON dump; JSON still prints to the console.
+- `tool/check.sh` passes `--offline` to `dart pub get` and `--no-pub` to
+  `flutter test`; CI's Flutter step also passes `--no-pub`. Keeps the
+  local suite at ~3 s.
+
+### Fixed
+
+- `PathBuilder.lineTo` (and `relativeLineTo`) after `close` now inject an
+  implicit `moveTo` at the just-closed contour's start, matching Skia /
+  `dart:ui`. Previously the verb stream silently extended the closed
+  contour, producing subtly different `contains` results.
+- `PathBuilder.close` is idempotent — repeated calls with no intervening
+  mutation no longer emit duplicate `close` verbs.
 
 ## 0.1.0
 
