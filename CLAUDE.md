@@ -7,15 +7,23 @@ See [DESIGN.md](DESIGN.md) for full design rationale.
 
 ```
 packages/
-  fast_path/                 Core library — pure Dart, published to pub.dev
+  fast_path/                 Core path library — pure Dart, published to pub.dev
+  fast_geometry/             Geometry + immutable Matrix transform — pure Dart, published
   fast_path_conformance/     Parity tests against dart:ui — Flutter only, not published
   fast_path_flutter/         Future Flutter bridge — not yet implemented
-  fast_path_bench/           Pure-Dart benchmarks (JIT + AOT-native runners)
-  fast_path_bench_flutter/   Flutter-hosted benchmarks (desktop AOT + manual web)
+  bench_core/                Shared benchmark harness (subject/reference pairs, JSON)
+  fast_path_bench/           Pure-Dart path benchmarks (JIT + AOT-native runners)
+  fast_path_bench_flutter/   Flutter-hosted path benchmarks (desktop AOT + manual web)
 skills/
   add-path-api/              Checklist for adding/changing PathBuilder or Path API
+  add-matrix-api/            Checklist for adding/changing fast_geometry's Matrix API
   port-from-skia/            Checklist for porting algorithms from Skia/Flutter
 ```
+
+The `fast_geometry` matrix benchmark suite lives in
+`packages/fast_geometry/benchmark/` and compares `Matrix` against
+`package:vector_math`'s `Matrix4`; run it with `tool/bench.sh --suite=geometry`.
+See `design_docs/matrix.md` and `design_docs/bench_unification.md`.
 
 ## Hard rules
 
@@ -65,6 +73,8 @@ Read and follow the appropriate skill file before starting these tasks:
 
 - Adding or changing anything on `PathBuilder` or `Path` →
   `skills/add-path-api/SKILL.md`
+- Adding or changing anything on `fast_geometry`'s `Matrix` →
+  `skills/add-matrix-api/SKILL.md`
 - Porting an algorithm from Skia or the Flutter engine →
   `skills/port-from-skia/SKILL.md`
 
