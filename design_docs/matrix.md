@@ -16,6 +16,34 @@ Based on these hypotheses, `Matrix` employs several techniques to maximize perfo
 ### 1. Monomorphic Object Representation
 The `Matrix` class is monomorphic for the fastest possible method and field access. To achieve this without carrying the payload of a full 4x4 matrix for every instance, the common 2D fields are stored inline, while the remaining fields are relegated to a nullable extension object.
 
+The matrix shapes the class needs to be able to represent efficiently are:
+
+```
+Identity:
+  1  0  0  0
+  0  1  0  0
+  0  0  1  0
+  0  0  0  1
+
+Translation 2D:
+  1  0  0  x
+  0  1  0  y
+  0  0  1  0
+  0  0  0  1
+
+General 2D:
+  sx k1 0  x
+  k2 sy 0  y
+  0  0  1  0
+  0  0  0  1
+
+Most general case:
+  m00(sx) m01(k1) m02(m8) m03(x)
+  m10(k2) m11(sy) m12(m9) m13(y)
+  m20(m2) m21(m6) m22(sz) m23(z)
+  m30(p1) m31(p2) m32(p3) m33(w)
+```
+
 ```dart
 class Matrix {
   final double _m00; // scaleX
@@ -28,6 +56,20 @@ class Matrix {
 
 - **Identity and Translation**: `_rest` is `null`. Only 4 inline `double`s are needed.
 - **General 2D / 3D**: `_rest` points to a `_MatrixExtension` object containing the other 12 entries.
+
+#### `_MatrixExtension` Structure
+The `_MatrixExtension` class holds the remaining 12 components of the 4x4 matrix:
+
+```dart
+class _MatrixExtension {
+  final double _m01; final double _m02;
+  final double _m10; final double _m12;
+  final double _m20; final double _m21; final double _m22; final double _m23;
+  final double _m30; final double _m31; final double _m32; final double _m33;
+}
+```
+
+Like `Matrix`, `_MatrixExtension` is deeply immutable. It provides its own primitive operations, such as negation and addition. It also defines a static canonical `_identityExtension` constant used as a fallback when an extension is needed but absent (for example, when multiplying a general matrix with a simple 2D matrix), thereby avoiding unnecessary object allocation during matrix arithmetic.
 
 This representation completely avoids allocating 16-element arrays (like `Float64List(16)`) for common operations, reducing memory footprint and boxing.
 
