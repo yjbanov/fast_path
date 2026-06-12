@@ -454,6 +454,26 @@ class _Matrix4TransformRect extends _LoopBench {
   }
 }
 
+class _MatrixTransposed extends _LoopBench {
+  _MatrixTransposed(super.name, this._build);
+  final Matrix Function() _build;
+  late Matrix _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.transposed().scaleX;
+}
+
+class _Matrix4Transposed extends _LoopBench {
+  _Matrix4Transposed(super.name, this._build);
+  final Matrix4 Function() _build;
+  late Matrix4 _a;
+  @override
+  void setup() => _a = _build();
+  @override
+  double step() => _a.transposed().storage[0];
+}
+
 /// The matrix benchmark catalog: fast_geometry's [Matrix] as the subject,
 /// `package:vector_math`'s `Matrix4` as the reference baseline.
 Catalog matrixCatalog() => Catalog(
@@ -628,6 +648,13 @@ Catalog matrixCatalog() => Catalog(
           subject: () => _MatrixTransformRect('Transform: rect', _mComplexA),
           reference: () =>
               _Matrix4TransformRect('Transform: rect', _m4ComplexA),
+        ),
+
+        // Transpose.
+        BenchmarkEntry(
+          subject: () => _MatrixTransposed('Transpose: complex', _mComplexA),
+          reference: () =>
+              _Matrix4Transposed('Transpose: complex', _m4ComplexA),
         ),
       ],
     );

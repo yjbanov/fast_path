@@ -18,3 +18,5 @@
   `transformRect` (returning `fast_geometry`'s `Offset`/`Rect`). They fast-path
   `isSimple2d` matrices, apply the perspective divide when not affine, and are
   parity-tested against `package:vector_math`.
+- `Matrix`: added `transposed()`. A diagonal matrix (scale/identity) is
+  symmetric and returns itself; a translation transposes into a general matrix.

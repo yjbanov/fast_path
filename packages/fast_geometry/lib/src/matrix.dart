@@ -550,6 +550,25 @@ final class Matrix {
     return Rect.fromLTRB(minX, minY, maxX, maxY);
   }
 
+  /// Returns the transpose of this matrix (rows and columns swapped).
+  ///
+  /// A diagonal matrix (a scale, including [identity]) is symmetric, so its
+  /// transpose is itself. A simple translation, by contrast, is not symmetric —
+  /// transposing moves the translation from the right column into the bottom
+  /// row, producing a general matrix.
+  Matrix transposed() {
+    if (_rest == null && _m03 == 0.0 && _m13 == 0.0) {
+      // Diagonal (scale/identity): symmetric.
+      return this;
+    }
+    return Matrix.transform(
+      m00: m00, m01: m10, m02: m20, m03: m30,
+      m10: m01, m11: m11, m12: m21, m13: m31,
+      m20: m02, m21: m12, m22: m22, m23: m32,
+      m30: m03, m31: m13, m32: m23, m33: m33,
+    );
+  }
+
   /// Whether [other] is a [Matrix] with the same 16 entries.
   ///
   /// Relies on the canonical-lowering invariant: equal transforms are always
