@@ -12,6 +12,7 @@ environment:
 
 dependencies:
   fast_path: any
+  bench_core: any
   benchmark_harness: ^2.2.0
 
 dev_dependencies:

@@ -27,6 +27,10 @@ jobs:
       - name: Analyze
         run: dart analyze
 
+      - name: Test bench_core
+        working-directory: packages/bench_core
+        run: dart test --reporter=expanded
+
       - name: Test fast_geometry
         working-directory: packages/fast_geometry
         run: dart test --reporter=expanded
@@ -34,6 +38,12 @@ jobs:
       - name: Test fast_path
         working-directory: packages/fast_path
         run: dart test --reporter=expanded
+
+      # Fast wiring + anti-DCE check of the matrix benchmark suite. Exercises
+      # the catalog, runner, and every Matrix/Matrix4 benchmark once instead of
+      # running a full ~2s-per-bench measurement sweep.
+      - name: Smoke-run geometry benchmarks
+        run: ./tool/bench.sh --suite=geometry --smoke
 
       - name: Conformance tests vs dart:ui
         working-directory: packages/fast_path_conformance

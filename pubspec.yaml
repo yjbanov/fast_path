@@ -5,6 +5,7 @@ environment:
   sdk: ^3.5.0
 
 workspace:
+  - packages/bench_core
   - packages/fast_geometry
   - packages/fast_path
   - packages/fast_path_conformance

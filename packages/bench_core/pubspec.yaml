@@ -1,0 +1,19 @@
+name: bench_core
+description: >-
+  Shared benchmark harness for the fast_path workspace. Domain-agnostic: it
+  knows how to measure, normalize, blackhole, pair, and report benchmarks, but
+  nothing about paths or matrices. Consumed by fast_path_bench,
+  fast_path_bench_flutter, and fast_geometry's benchmark suite. Not published.
+publish_to: none
+
+resolution: workspace
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  benchmark_harness: ^2.2.0
+
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.25.0

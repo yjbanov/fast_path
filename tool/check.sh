@@ -48,11 +48,21 @@ run_phase "dart pub get (workspace)" \
 run_phase "dart analyze (workspace)" \
   dart analyze
 
+run_phase "dart test (bench_core)" \
+  bash -c "cd packages/bench_core && dart test --reporter=compact"
+
 run_phase "dart test (fast_geometry)" \
   bash -c "cd packages/fast_geometry && dart test --reporter=compact"
 
 run_phase "dart test (fast_path)" \
   bash -c "cd packages/fast_path && dart test --reporter=compact"
+
+# Fast end-to-end check of the matrix benchmark suite: exercises the catalog,
+# runner, and every Matrix/Matrix4 benchmark once (no 2s-per-bench measurement)
+# so a broken pair or a reintroduced dead-code-elimination hole fails here
+# rather than during a manual bench run.
+run_phase "bench smoke (geometry)" \
+  ./tool/bench.sh --suite=geometry --smoke
 
 if command -v flutter >/dev/null 2>&1; then
   # --no-pub: the workspace was already resolved by `dart pub get` above.
