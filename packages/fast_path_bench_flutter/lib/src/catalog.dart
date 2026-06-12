@@ -221,6 +221,14 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: ShiftPathUi1kBenchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Transform (affine)',
+        description:
+            '1000 affine transform calls (rotate+scale) returning fresh '
+            'paths.',
+        createFp: fp.TransformPath1kBenchmark.new,
+        createUi: TransformPathUi1kBenchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'getBounds — cached',
         description:
             '1000 calls on a path whose bounds cache is primed. Should '

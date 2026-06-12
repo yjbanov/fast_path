@@ -10,6 +10,16 @@
   allocated and translated. Parity verified via a new Path-level
   operation harness in the conformance suite. `shift_path_1k` benchmark
   pair added.
+- `Path.transform(Float64List matrix4)`: pure function returning a new
+  path with every point mapped through a column-major 4×4 matrix. Affine
+  fast path (no per-point divide); perspective matrices apply the
+  homogeneous divide per point. Verbs and conic weights are preserved
+  unchanged under both — a probe against the engine confirmed dart:ui
+  keeps the verb structure and conic weights and merely relocates
+  control points, even under perspective (it does NOT recompute conic
+  weights the way classic Skia's SkConic::TransformW would). Parity
+  covers scale, 90° rotation, perspective-on-quad, and perspective-on-
+  conic. `transform_path_1k` benchmark pair added.
 
 
 - M2 begins — `PathBuilder.addRect(Rect)`: closed rectangular contour,

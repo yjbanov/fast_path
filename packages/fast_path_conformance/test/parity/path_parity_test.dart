@@ -2,6 +2,7 @@
 // Use of this source code is governed by the BSD-3-Clause license in the
 // project root LICENSE file.
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -1716,7 +1717,97 @@ final List<_PathOpCase> _pathOpCases = <_PathOpCase>[
       ..._gridFar,
     ],
   ),
+
+  // transform — affine.
+  _PathOpCase(
+    'transform: scale 3x2 about origin',
+    (t) => t
+      ..moveTo(0, 0)
+      ..lineTo(10, 0)
+      ..quadraticBezierTo(15, 5, 10, 10)
+      ..close(),
+    (p) => p.transform(_fpScale(3, 2)),
+    (p) => p.transform(_uiScale(3, 2)),
+    const [
+      fp.Offset(15, 10),
+      fp.Offset(5, 4),
+      fp.Offset(40, 10), // outside, to the right
+      ..._gridFar,
+    ],
+  ),
+  _PathOpCase(
+    'transform: 90-degree rotation of a circle',
+    (t) => t.addOval(0, 0, 100, 60),
+    (p) => p.transform(_fpRotateZ(math.pi / 2)),
+    (p) => p.transform(_uiRotateZ(math.pi / 2)),
+    const [
+      fp.Offset(-30, 50), // rotated centre region
+      fp.Offset(-55, 50), // outside
+      ..._gridFar,
+    ],
+  ),
+  // transform — perspective. dart:ui maps each control point through the
+  // homogeneous matrix (per-point divide) and keeps verbs/weights;
+  // fast_path matches (verified empirically). Samples stay clear of the
+  // warped boundary.
+  _PathOpCase(
+    'transform: perspective on a quad contour',
+    (t) => t
+      ..moveTo(0, 0)
+      ..quadraticBezierTo(50, 80, 100, 0)
+      ..lineTo(100, 60)
+      ..lineTo(0, 60)
+      ..close(),
+    (p) => p.transform(_fpPerspective(0.002, 0.001)),
+    (p) => p.transform(_uiPerspective(0.002, 0.001)),
+    const [
+      fp.Offset(50, 40),
+      fp.Offset(20, 30),
+      fp.Offset(75, 30),
+      ..._gridFar,
+    ],
+  ),
+  _PathOpCase(
+    'transform: perspective on a conic oval',
+    (t) => t.addOval(0, 0, 100, 80),
+    (p) => p.transform(_fpPerspective(0.003, 0.0015)),
+    (p) => p.transform(_uiPerspective(0.003, 0.0015)),
+    const [
+      fp.Offset(45, 38), // interior, away from the warped edge
+      fp.Offset(40, 36),
+      ..._gridFar,
+    ],
+  ),
 ];
+
+Float64List _fpScale(double sx, double sy) => Float64List.fromList([
+      sx, 0, 0, 0, //
+      0, sy, 0, 0, //
+      0, 0, 1, 0, //
+      0, 0, 0, 1,
+    ]);
+Float64List _uiScale(double sx, double sy) => _fpScale(sx, sy);
+
+Float64List _fpRotateZ(double r) {
+  final c = math.cos(r);
+  final s = math.sin(r);
+  return Float64List.fromList([
+    c, s, 0, 0, //
+    -s, c, 0, 0, //
+    0, 0, 1, 0, //
+    0, 0, 0, 1,
+  ]);
+}
+
+Float64List _uiRotateZ(double r) => _fpRotateZ(r);
+
+Float64List _fpPerspective(double px, double py) => Float64List.fromList([
+      1, 0, 0, px, //
+      0, 1, 0, py, //
+      0, 0, 1, 0, //
+      0, 0, 0, 1,
+    ]);
+Float64List _uiPerspective(double px, double py) => _fpPerspective(px, py);
 
 void main() {
   group('M0 parity vs dart:ui.Path', () {

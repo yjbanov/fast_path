@@ -1182,6 +1182,55 @@ final class Path {
     return Path._(_verbs, newPoints, _conicWeights, fillType);
   }
 
+  /// Returns a copy of this path transformed by [matrix4], a column-major
+  /// 4×4 transformation matrix (the same representation `dart:ui` and
+  /// `Matrix4` use).
+  ///
+  /// Every stored point — including curve control points — is mapped
+  /// through the matrix. For a perspective matrix each point also gets
+  /// the homogeneous divide. Verbs and conic weights are preserved
+  /// unchanged: under both affine *and* perspective maps, `dart:ui`
+  /// keeps the verb structure and conic weights and simply relocates the
+  /// control points (verified empirically against the engine). Verb and
+  /// weight buffers are therefore shared with the original; only the
+  /// point buffer is allocated.
+  ///
+  /// A pure function: the receiver is unchanged.
+  ///
+  /// Behaves identically to `Path.transform` in `dart:ui`.
+  Path transform(Float64List matrix4) {
+    final n = _points.length;
+    final newPoints = Float32List(n);
+    final m0 = matrix4[0];
+    final m1 = matrix4[1];
+    final m4 = matrix4[4];
+    final m5 = matrix4[5];
+    final m12 = matrix4[12];
+    final m13 = matrix4[13];
+
+    if (matrix4[3] == 0 && matrix4[7] == 0 && matrix4[15] == 1.0) {
+      // Affine fast path — no per-point divide.
+      for (var i = 0; i < n; i += 2) {
+        final x = _points[i];
+        final y = _points[i + 1];
+        newPoints[i] = m0 * x + m4 * y + m12;
+        newPoints[i + 1] = m1 * x + m5 * y + m13;
+      }
+    } else {
+      final m3 = matrix4[3];
+      final m7 = matrix4[7];
+      final m15 = matrix4[15];
+      for (var i = 0; i < n; i += 2) {
+        final x = _points[i];
+        final y = _points[i + 1];
+        final w = m3 * x + m7 * y + m15;
+        newPoints[i] = (m0 * x + m4 * y + m12) / w;
+        newPoints[i + 1] = (m1 * x + m5 * y + m13) / w;
+      }
+    }
+    return Path._(_verbs, newPoints, _conicWeights, fillType);
+  }
+
   /// Returns the signed winding contribution of the directed edge
   /// `(x0, y0) -> (x1, y1)` for a horizontal ray cast from `(px, py)` to
   /// `+x` infinity.

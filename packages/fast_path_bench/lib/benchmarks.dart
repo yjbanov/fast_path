@@ -36,6 +36,7 @@ import 'src/path_equality.dart';
 import 'src/path_from_path.dart';
 import 'src/relative_polyline.dart';
 import 'src/shift_path.dart';
+import 'src/transform_path.dart';
 
 export 'src/add_polygon.dart';
 export 'src/add_arcs.dart';
@@ -63,6 +64,7 @@ export 'src/path_equality.dart';
 export 'src/path_from_path.dart';
 export 'src/relative_polyline.dart';
 export 'src/shift_path.dart';
+export 'src/transform_path.dart';
 
 /// The canonical list of fast_path benchmarks. Add new benchmarks here so
 /// every runner picks them up.
@@ -98,6 +100,7 @@ List<FastPathBenchmark> allBenchmarks() => <FastPathBenchmark>[
       BoundsCold1kBenchmark(),
       // Transforms.
       ShiftPath1kBenchmark(),
+      TransformPath1kBenchmark(),
       // Conversions (fp-only).
       BuilderFromPath1kBenchmark(),
       BuilderSnapshot1kBenchmark(),

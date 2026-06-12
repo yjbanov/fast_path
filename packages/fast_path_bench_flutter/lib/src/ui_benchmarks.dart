@@ -3,6 +3,7 @@
 // project root LICENSE file.
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:fast_path_bench/benchmarks.dart' show FastPathBenchmark;
@@ -718,6 +719,45 @@ class ShiftPathUi1kBenchmark extends FastPathBenchmark {
     for (var i = 0; i < 1000; i++) {
       final shifted = _path.shift(ui.Offset(i.toDouble(), -i.toDouble()));
       acc ^= shifted.getBounds().left.toInt();
+    }
+    sink ^= acc;
+  }
+
+  @override
+  int get opsPerRun => 1000;
+}
+
+/// Mirrors `TransformPath1kBenchmark`. 1000 affine `ui.Path.transform`
+/// calls.
+class TransformPathUi1kBenchmark extends FastPathBenchmark {
+  TransformPathUi1kBenchmark() : super('transform_path_ui_1k');
+
+  late ui.Path _path;
+  late Float64List _matrix;
+
+  @override
+  void setup() {
+    _path = ui.Path()..moveTo(0, 0);
+    for (var i = 1; i < 200; i++) {
+      _path.lineTo(i.toDouble(), (i * 1.7) % 50);
+    }
+    _path.close();
+    const c = 0.8660254037844387 * 1.5;
+    const s = 0.5 * 1.5;
+    _matrix = Float64List.fromList([
+      c, s, 0, 0, //
+      -s, c, 0, 0, //
+      0, 0, 1, 0, //
+      3, 7, 0, 1,
+    ]);
+  }
+
+  @override
+  void run() {
+    var acc = 0;
+    for (var i = 0; i < 1000; i++) {
+      final transformed = _path.transform(_matrix);
+      acc ^= transformed.getBounds().left.toInt();
     }
     sink ^= acc;
   }
