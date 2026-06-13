@@ -71,7 +71,7 @@ void main() {
             ..addRect(const Rect.fromLTRB(0, 0, 20, 10)))
           .build();
       final path = (PathBuilder()
-            ..addPath(src, const Offset(100, 0), matrix4: rot))
+            ..addPath(src, const Offset(100, 0), matrix: rot.toMatrix()))
           .build();
       // Rect (0,0,20,10) rotated 90° CW → x' ∈ [-10, 0], y' ∈ [0, 20];
       // then offset (100, 0) → (90, 0, 100, 20).
@@ -93,9 +93,9 @@ void main() {
       final src = (PathBuilder()..addRect(const Rect.fromLTRB(0, 0, 40, 30)))
           .build();
       final viaAddPath =
-          (PathBuilder()..addPath(src, Offset.zero, matrix4: perspective))
+          (PathBuilder()..addPath(src, Offset.zero, matrix: perspective.toMatrix()))
               .build();
-      final viaTransform = src.transform(perspective);
+      final viaTransform = src.transform(perspective.toMatrix());
       expect(viaAddPath, equals(viaTransform));
     });
   });
@@ -165,7 +165,8 @@ void main() {
     test('addPath ignores the z-column entries', () {
       final src = _triangle();
       final out =
-          (PathBuilder()..addPath(src, Offset.zero, matrix4: junk)).build();
+          (PathBuilder()..addPath(src, Offset.zero, matrix: junk.toMatrix()))
+              .build();
       expect(out, equals(src)); // junk in z entries must not leak in
     });
 
@@ -182,10 +183,11 @@ void main() {
       ]);
       final src =
           (PathBuilder()..addRect(const Rect.fromLTRB(0, 0, 40, 30))).build();
-      final viaAddPath =
-          (PathBuilder()..addPath(src, const Offset(100, 50), matrix4: persp))
-              .build();
-      final viaCompose = src.transform(persp).shift(const Offset(100, 50));
+      final viaAddPath = (PathBuilder()
+            ..addPath(src, const Offset(100, 50), matrix: persp.toMatrix()))
+          .build();
+      final viaCompose =
+          src.transform(persp.toMatrix()).shift(const Offset(100, 50));
       expect(viaAddPath, equals(viaCompose));
     });
 
@@ -205,7 +207,7 @@ void main() {
           .build();
       final extended = (PathBuilder()
             ..moveTo(0, 0)
-            ..extendWithPath(src, const Offset(1, 1), matrix4: scale2))
+            ..extendWithPath(src, const Offset(1, 1), matrix: scale2.toMatrix()))
           .build();
       final explicit = (PathBuilder()
             ..moveTo(0, 0)

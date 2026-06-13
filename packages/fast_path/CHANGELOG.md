@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking:** `Path.transform`, `PathBuilder.addPath`, and
+  `PathBuilder.extendWithPath` now take a `fast_geometry` `Matrix` instead of a
+  column-major `Float64List` (the `matrix4:` named parameter is now `matrix:`).
+  Callers holding `dart:ui` / `Matrix4`-style engine data bridge with the
+  `Float64List.toMatrix()` extension. Behavior is otherwise unchanged.
+
 ### Added
 
 - M0 — geometry types and the builder/path split.

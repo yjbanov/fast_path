@@ -248,8 +248,8 @@ class _FpTarget implements PathTarget {
       _b.addPath(
         _buildFp(sub),
         fp.Offset(dx, dy),
-        matrix4:
-            matrix4 == null ? null : Float64List.fromList(matrix4),
+        matrix:
+            matrix4 == null ? null : Float64List.fromList(matrix4).toMatrix(),
       );
 
   @override
@@ -262,8 +262,8 @@ class _FpTarget implements PathTarget {
       _b.extendWithPath(
         _buildFp(sub),
         fp.Offset(dx, dy),
-        matrix4:
-            matrix4 == null ? null : Float64List.fromList(matrix4),
+        matrix:
+            matrix4 == null ? null : Float64List.fromList(matrix4).toMatrix(),
       );
 
   @override
@@ -1808,15 +1808,18 @@ final List<_PathOpCase> _pathOpCases = <_PathOpCase>[
   ),
 ];
 
-Float64List _fpScale(double sx, double sy) => Float64List.fromList([
+// dart:ui still takes a column-major Float64List; fast_path takes a Matrix.
+// The `_fp*` helpers derive their Matrix from the same Float64List the `_ui*`
+// helpers feed dart:ui (via toMatrix), so both sides transform identical values.
+Float64List _uiScale(double sx, double sy) => Float64List.fromList([
       sx, 0, 0, 0, //
       0, sy, 0, 0, //
       0, 0, 1, 0, //
       0, 0, 0, 1,
     ]);
-Float64List _uiScale(double sx, double sy) => _fpScale(sx, sy);
+fp.Matrix _fpScale(double sx, double sy) => _uiScale(sx, sy).toMatrix();
 
-Float64List _fpRotateZ(double r) {
+Float64List _uiRotateZ(double r) {
   final c = math.cos(r);
   final s = math.sin(r);
   return Float64List.fromList([
@@ -1827,15 +1830,16 @@ Float64List _fpRotateZ(double r) {
   ]);
 }
 
-Float64List _uiRotateZ(double r) => _fpRotateZ(r);
+fp.Matrix _fpRotateZ(double r) => _uiRotateZ(r).toMatrix();
 
-Float64List _fpPerspective(double px, double py) => Float64List.fromList([
+Float64List _uiPerspective(double px, double py) => Float64List.fromList([
       1, 0, 0, px, //
       0, 1, 0, py, //
       0, 0, 1, 0, //
       0, 0, 0, 1,
     ]);
-Float64List _uiPerspective(double px, double py) => _fpPerspective(px, py);
+fp.Matrix _fpPerspective(double px, double py) =>
+    _uiPerspective(px, py).toMatrix();
 
 /// computeMetrics parity cases: build a path via the program, compare
 /// per-contour length and sampled tangent positions against dart:ui.

@@ -642,15 +642,14 @@ final class PathBuilder {
   }
 
   /// Appends every contour of [path] to this builder, translated by
-  /// [offset] and (optionally) transformed by [matrix4], a column-major
-  /// 4×4 matrix. The offset is applied *after* the matrix, matching
-  /// `dart:ui`.
+  /// [offset] and (optionally) transformed by [matrix]. The offset is applied
+  /// *after* the matrix, matching `dart:ui`.
   ///
-  /// Both affine and perspective matrices are supported; a perspective
-  /// matrix applies the homogeneous divide per control point, keeping
-  /// verbs and conic weights unchanged (the same thing [Path.transform]
-  /// does — see its doc for the empirical basis). The semantics are
-  /// "transform by [matrix4], then translate by [offset]".
+  /// Both affine and perspective matrices are supported; a perspective matrix
+  /// applies the homogeneous divide per control point, keeping verbs and conic
+  /// weights unchanged (the same thing [Path.transform] does — see its doc for
+  /// the empirical basis). The semantics are "transform by [matrix], then
+  /// translate by [offset]".
   ///
   /// Behaves identically to `Path.addPath` in `dart:ui` for an affine
   /// matrix (with any offset) and for a perspective matrix with a zero
@@ -661,10 +660,12 @@ final class PathBuilder {
   /// That combination is rare; if you need it, transform first and add
   /// at zero offset.
   ///
-  /// Otherwise behaves identically to `Path.addPath` in `dart:ui`,
-  /// except that this method lives on [PathBuilder] rather than `Path`.
-  void addPath(Path path, Offset offset, {Float64List? matrix4}) {
-    _appendPath(path, offset.dx, offset.dy, matrix4, extend: false);
+  /// Otherwise behaves identically to `Path.addPath` in `dart:ui`, except that
+  /// this method lives on [PathBuilder] rather than `Path`, and takes a
+  /// `fast_geometry` [Matrix] rather than `dart:ui`'s `Float64List` (bridge
+  /// engine data with `Float64List.toMatrix()`).
+  void addPath(Path path, Offset offset, {Matrix? matrix}) {
+    _appendPath(path, offset.dx, offset.dy, matrix, extend: false);
   }
 
   /// Like [addPath], but the first contour of [path] is joined to the
@@ -674,15 +675,15 @@ final class PathBuilder {
   ///
   /// Behaves identically to `Path.extendWithPath` in `dart:ui`, except
   /// that this method lives on [PathBuilder] rather than `Path`.
-  void extendWithPath(Path path, Offset offset, {Float64List? matrix4}) {
-    _appendPath(path, offset.dx, offset.dy, matrix4, extend: true);
+  void extendWithPath(Path path, Offset offset, {Matrix? matrix}) {
+    _appendPath(path, offset.dx, offset.dy, matrix, extend: true);
   }
 
   void _appendPath(
     Path path,
     double dx,
     double dy,
-    Float64List? matrix4, {
+    Matrix? matrix, {
     required bool extend,
   }) {
     final srcVerbs = path._verbs;
@@ -695,26 +696,27 @@ final class PathBuilder {
     final pN = srcPoints.length;
     final wN = srcWeights.length;
 
-    // Decode the matrix. Column-major 4x4: x' = m0·x + m4·y + m12,
-    // y' = m1·x + m5·y + m13, with a homogeneous divide by
-    // w = m3·x + m7·y + m15 when perspective. The offset (dx, dy) is
-    // added after the matrix (and after the divide), so it is not folded
-    // into m12/m13.
-    var m0 = 1.0, m1 = 0.0, m4 = 0.0, m5 = 1.0, m12 = 0.0, m13 = 0.0;
-    var m3 = 0.0, m7 = 0.0, m15 = 1.0;
+    // Decode the matrix's 2D-affine block (the z column/row is ignored —
+    // points are treated as z=0): x' = m00·x + m01·y + m03,
+    // y' = m10·x + m11·y + m13, with a homogeneous divide by
+    // w = m30·x + m31·y + m33 when perspective. The offset (dx, dy) is added
+    // after the matrix (and after the divide), so it is not folded into
+    // m03/m13.
+    var m00 = 1.0, m10 = 0.0, m01 = 0.0, m11 = 1.0, m03 = 0.0, m13 = 0.0;
+    var m30 = 0.0, m31 = 0.0, m33 = 1.0;
     var perspective = false;
-    if (matrix4 != null) {
-      m0 = matrix4[0];
-      m1 = matrix4[1];
-      m4 = matrix4[4];
-      m5 = matrix4[5];
-      m12 = matrix4[12];
-      m13 = matrix4[13];
-      if (matrix4[3] != 0 || matrix4[7] != 0 || matrix4[15] != 1.0) {
+    if (matrix != null) {
+      m00 = matrix.m00;
+      m10 = matrix.m10;
+      m01 = matrix.m01;
+      m11 = matrix.m11;
+      m03 = matrix.m03;
+      m13 = matrix.m13;
+      if (!matrix.isAffine2d) {
         perspective = true;
-        m3 = matrix4[3];
-        m7 = matrix4[7];
-        m15 = matrix4[15];
+        m30 = matrix.m30;
+        m31 = matrix.m31;
+        m33 = matrix.m33;
       }
     }
 
@@ -731,12 +733,12 @@ final class PathBuilder {
       final y = srcPoints[1];
       final double jx, jy;
       if (perspective) {
-        final w = m3 * x + m7 * y + m15;
-        jx = (m0 * x + m4 * y + m12) / w + dx;
-        jy = (m1 * x + m5 * y + m13) / w + dy;
+        final w = m30 * x + m31 * y + m33;
+        jx = (m00 * x + m01 * y + m03) / w + dx;
+        jy = (m10 * x + m11 * y + m13) / w + dy;
       } else {
-        jx = m0 * x + m4 * y + m12 + dx;
-        jy = m1 * x + m5 * y + m13 + dy;
+        jx = m00 * x + m01 * y + m03 + dx;
+        jy = m10 * x + m11 * y + m13 + dy;
       }
       lineTo(jx, jy);
       vStart = 1;
@@ -759,7 +761,7 @@ final class PathBuilder {
 
     // Transform-copy the points in one tight loop (no verb awareness).
     final pointBase = _pointsLen;
-    if (matrix4 == null) {
+    if (matrix == null) {
       // Translate-only fast path (no matrix) — the common "stamp at a
       // position" case. Pure add, no multiplies.
       var di = pointBase;
@@ -772,17 +774,17 @@ final class PathBuilder {
       for (var si = pStart; si < pN; si += 2) {
         final x = srcPoints[si];
         final y = srcPoints[si + 1];
-        final w = m3 * x + m7 * y + m15;
-        _points[di++] = (m0 * x + m4 * y + m12) / w + dx;
-        _points[di++] = (m1 * x + m5 * y + m13) / w + dy;
+        final w = m30 * x + m31 * y + m33;
+        _points[di++] = (m00 * x + m01 * y + m03) / w + dx;
+        _points[di++] = (m10 * x + m11 * y + m13) / w + dy;
       }
     } else {
       var di = pointBase;
       for (var si = pStart; si < pN; si += 2) {
         final x = srcPoints[si];
         final y = srcPoints[si + 1];
-        _points[di++] = m0 * x + m4 * y + m12 + dx;
-        _points[di++] = m1 * x + m5 * y + m13 + dy;
+        _points[di++] = m00 * x + m01 * y + m03 + dx;
+        _points[di++] = m10 * x + m11 * y + m13 + dy;
       }
     }
     _pointsLen = newPointsLen;
@@ -1233,50 +1235,51 @@ final class Path {
     return Path._(_verbs, newPoints, _conicWeights, fillType);
   }
 
-  /// Returns a copy of this path transformed by [matrix4], a column-major
-  /// 4×4 transformation matrix (the same representation `dart:ui` and
-  /// `Matrix4` use).
+  /// Returns a copy of this path transformed by [matrix].
   ///
-  /// Every stored point — including curve control points — is mapped
-  /// through the matrix. For a perspective matrix each point also gets
-  /// the homogeneous divide. Verbs and conic weights are preserved
-  /// unchanged: under both affine *and* perspective maps, `dart:ui`
+  /// Every stored point — including curve control points — is mapped through
+  /// the matrix's 2D-affine block (points are treated as `z = 0`, so the
+  /// matrix's z column/row is ignored). For a non-affine (perspective) matrix
+  /// each point also gets the homogeneous divide. Verbs and conic weights are
+  /// preserved unchanged: under both affine *and* perspective maps, `dart:ui`
   /// keeps the verb structure and conic weights and simply relocates the
   /// control points (verified empirically against the engine). Verb and
-  /// weight buffers are therefore shared with the original; only the
-  /// point buffer is allocated.
+  /// weight buffers are therefore shared with the original; only the point
+  /// buffer is allocated.
   ///
   /// A pure function: the receiver is unchanged.
   ///
-  /// Behaves identically to `Path.transform` in `dart:ui`.
-  Path transform(Float64List matrix4) {
+  /// Behaves identically to `Path.transform` in `dart:ui`, which takes a
+  /// column-major `Float64List`; callers holding engine / `Matrix4` data
+  /// bridge with the `Float64List.toMatrix()` extension.
+  Path transform(Matrix matrix) {
     final n = _points.length;
     final newPoints = Float32List(n);
-    final m0 = matrix4[0];
-    final m1 = matrix4[1];
-    final m4 = matrix4[4];
-    final m5 = matrix4[5];
-    final m12 = matrix4[12];
-    final m13 = matrix4[13];
+    final m00 = matrix.m00;
+    final m01 = matrix.m01;
+    final m03 = matrix.m03;
+    final m10 = matrix.m10;
+    final m11 = matrix.m11;
+    final m13 = matrix.m13;
 
-    if (matrix4[3] == 0 && matrix4[7] == 0 && matrix4[15] == 1.0) {
+    if (matrix.isAffine2d) {
       // Affine fast path — no per-point divide.
       for (var i = 0; i < n; i += 2) {
         final x = _points[i];
         final y = _points[i + 1];
-        newPoints[i] = m0 * x + m4 * y + m12;
-        newPoints[i + 1] = m1 * x + m5 * y + m13;
+        newPoints[i] = m00 * x + m01 * y + m03;
+        newPoints[i + 1] = m10 * x + m11 * y + m13;
       }
     } else {
-      final m3 = matrix4[3];
-      final m7 = matrix4[7];
-      final m15 = matrix4[15];
+      final m30 = matrix.m30;
+      final m31 = matrix.m31;
+      final m33 = matrix.m33;
       for (var i = 0; i < n; i += 2) {
         final x = _points[i];
         final y = _points[i + 1];
-        final w = m3 * x + m7 * y + m15;
-        newPoints[i] = (m0 * x + m4 * y + m12) / w;
-        newPoints[i + 1] = (m1 * x + m5 * y + m13) / w;
+        final w = m30 * x + m31 * y + m33;
+        newPoints[i] = (m00 * x + m01 * y + m03) / w;
+        newPoints[i + 1] = (m10 * x + m11 * y + m13) / w;
       }
     }
     return Path._(_verbs, newPoints, _conicWeights, fillType);

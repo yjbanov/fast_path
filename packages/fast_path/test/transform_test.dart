@@ -8,38 +8,15 @@ import 'dart:typed_data';
 import 'package:fast_path/fast_path.dart';
 import 'package:test/test.dart';
 
-/// Column-major 4x4 builders for the common 2D cases.
-Float64List _translate(double dx, double dy) => Float64List.fromList([
-      1, 0, 0, 0, //
-      0, 1, 0, 0, //
-      0, 0, 1, 0, //
-      dx, dy, 0, 1,
-    ]);
+/// Matrix builders for the common 2D cases.
+Matrix _translate(double dx, double dy) =>
+    Matrix.translation2d(dx: dx, dy: dy);
 
-Float64List _scale(double sx, double sy) => Float64List.fromList([
-      sx, 0, 0, 0, //
-      0, sy, 0, 0, //
-      0, 0, 1, 0, //
-      0, 0, 0, 1,
-    ]);
+Matrix _scale(double sx, double sy) => Matrix.scale(sx, sy);
 
-Float64List _rotateZ(double radians) {
-  final c = math.cos(radians);
-  final s = math.sin(radians);
-  return Float64List.fromList([
-    c, s, 0, 0, //
-    -s, c, 0, 0, //
-    0, 0, 1, 0, //
-    0, 0, 0, 1,
-  ]);
-}
+Matrix _rotateZ(double radians) => Matrix.rotationZ(radians);
 
-final Float64List _identity = Float64List.fromList([
-  1, 0, 0, 0, //
-  0, 1, 0, 0, //
-  0, 0, 1, 0, //
-  0, 0, 0, 1,
-]);
+const Matrix _identity = Matrix.identity;
 
 Path _unitSquare() =>
     (PathBuilder()..addRect(const Rect.fromLTRB(0, 0, 10, 10))).build();
@@ -125,7 +102,7 @@ void main() {
       // Point (10, 0): w = 0.01*10 + 1 = 1.1 → (10/1.1, 0) ≈ (9.09, 0).
       final p = (PathBuilder()..addRect(const Rect.fromLTRB(0, 0, 10, 10)))
           .build()
-          .transform(m);
+          .transform(m.toMatrix());
       final b = p.getBounds();
       // Right edge x=10 has w=1.1 → 9.09; the far corner shrinks.
       expect(b.right, closeTo(10 / 1.1, 1e-3));
@@ -155,7 +132,7 @@ void main() {
       ]);
       final p = _unitSquare();
       // Identical to an identity transform — the junk must not leak in.
-      expect(p.transform(junk), equals(p));
+      expect(p.transform(junk.toMatrix()), equals(p));
     });
 
     test('off-diagonal shear reads m01 (col-major index 4), applied to y', () {
@@ -179,7 +156,7 @@ void main() {
             ..lineTo(10, 5) // (0,5) -> (0 + 2*5, 5)
             ..close())
           .build();
-      expect(src.transform(shear), equals(expected));
+      expect(src.transform(shear.toMatrix()), equals(expected));
     });
 
     test('perspective triggered by m33 != 1 alone applies the divide', () {
@@ -193,7 +170,7 @@ void main() {
       ]);
       final rect =
           (PathBuilder()..addRect(const Rect.fromLTRB(0, 0, 10, 20))).build();
-      expect(rect.transform(m).getBounds(),
+      expect(rect.transform(m.toMatrix()).getBounds(),
           equals(const Rect.fromLTRB(0, 0, 5, 10)));
     });
 

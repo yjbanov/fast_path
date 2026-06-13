@@ -2,8 +2,6 @@
 // Use of this source code is governed by the BSD-3-Clause license in the
 // project root LICENSE file.
 
-import 'dart:typed_data';
-
 import 'package:fast_path/fast_path.dart';
 
 import 'benchmark_base.dart';
@@ -15,7 +13,7 @@ class TransformPath1kBenchmark extends FastPathBenchmark {
   TransformPath1kBenchmark() : super('transform_path_1k');
 
   late Path _path;
-  late Float64List _matrix;
+  late Matrix _matrix;
 
   @override
   void setup() {
@@ -25,15 +23,12 @@ class TransformPath1kBenchmark extends FastPathBenchmark {
     }
     b.close();
     _path = b.build();
-    // Rotate 30° and scale 1.5 — a representative affine transform.
+    // Rotate 30° and scale 1.5 — a representative affine transform. Built
+    // once here (not per op): m00=m11=c, m01=-s, m10=s, translate (3, 7).
     const c = 0.8660254037844387 * 1.5; // cos30 * 1.5
     const s = 0.5 * 1.5; // sin30 * 1.5
-    _matrix = Float64List.fromList([
-      c, s, 0, 0, //
-      -s, c, 0, 0, //
-      0, 0, 1, 0, //
-      3, 7, 0, 1,
-    ]);
+    _matrix =
+        Matrix.transform2d(scaleX: c, scaleY: c, k1: -s, k2: s, dx: 3, dy: 7);
   }
 
   @override
