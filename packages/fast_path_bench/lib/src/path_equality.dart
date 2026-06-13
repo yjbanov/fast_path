@@ -11,7 +11,7 @@ import 'benchmark_base.dart';
 /// the length checks pass, and we walk every verb and point byte to
 /// confirm equality.
 ///
-/// fast_path's structural equality (DESIGN.md §4.4) is what lets a
+/// fast_path's structural equality (fast_path's DESIGN.md §4.4) is what lets a
 /// [Path] be used as a `Map` key — memoizing `combine` results, caching
 /// derived geometry per shape, etc. This benchmark tells us whether
 /// that pattern is cheap enough to lean on.

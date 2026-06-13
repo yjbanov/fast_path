@@ -286,7 +286,7 @@ before it would churn the public API twice.
 3. **Add the specialized transform loops** (identity → `this`, translate-only,
    scale-translate) plus a `transform_translate` benchmark that exercises them.
 4. **Update docs and the skill.** Rewrite the `add-path-api` skill's matrix rule
-   (§1 note); update `DESIGN.md` §11 (the open question is now resolved) and the
+   (§1 note); update `packages/fast_path/DESIGN.md` §11 (the open question is now resolved) and the
    public API section.
 
 ---

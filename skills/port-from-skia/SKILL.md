@@ -117,7 +117,7 @@ Common substitutions:
 
 | C++ idiom | Dart translation |
 | --- | --- |
-| `float`, `SkScalar` | `double` (we use f64 in arithmetic, store as f32 in buffers — see DESIGN.md §5) |
+| `float`, `SkScalar` | `double` (we use f64 in arithmetic, store as f32 in buffers — see `packages/fast_path/DESIGN.md` §5) |
 | `SkPoint pts[3]` | A view into the path's `Float32List`, indexed by base offset. Don't allocate a fresh list per call. |
 | `SkScalar* dst` | Index + base offset on a `Float32List`. |
 | Out-parameters (`SkScalar* outT`) | Return a record or a small mutable holder. Don't allocate per call in hot paths. |

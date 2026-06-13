@@ -9,7 +9,7 @@ import 'dart:ui' as ui;
 import 'package:fast_path/fast_path.dart' as fp;
 import 'package:flutter_test/flutter_test.dart';
 
-/// Tolerances for `getBounds` parity, per DESIGN.md §8.2.
+/// Tolerances for `getBounds` parity, per fast_path's DESIGN.md §8.2.
 const double _boundsAbsTol = 1e-4;
 const double _boundsRelTol = 1e-6;
 

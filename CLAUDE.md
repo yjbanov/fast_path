@@ -1,7 +1,13 @@
-# fast_path
+# fast_2d
 
-Pure-Dart 2D path library with behavioral parity to Flutter's `dart:ui.Path`.
-See [DESIGN.md](DESIGN.md) for full design rationale.
+A family of fast, pure-Dart 2D libraries — geometry, transforms, and paths that
+run entirely on the Dart heap, with no native bindings. See [README.md](README.md)
+for the package overview; `fast_path`'s full design rationale is in
+[packages/fast_path/DESIGN.md](packages/fast_path/DESIGN.md).
+
+**The rules that apply depend on which package you are touching.** "fast_path"
+is one package here, not the whole repo — don't apply its `dart:ui`-parity
+contract to `fast_geometry`, which answers to a different oracle.
 
 ## Repo layout
 
@@ -18,74 +24,91 @@ skills/
   add-path-api/              Checklist for adding/changing PathBuilder or Path API
   add-matrix-api/            Checklist for adding/changing fast_geometry's Matrix API
   port-from-skia/            Checklist for porting algorithms from Skia/Flutter
+design_docs/                 Cross-package design notes (matrix, bench, fast_geometry)
 ```
 
-The `fast_geometry` matrix benchmark suite lives in
-`packages/fast_geometry/benchmark/` and compares `Matrix` against
-`package:vector_math`'s `Matrix4`; run it with `tool/bench.sh --suite=geometry`.
-See `design_docs/matrix.md` and `design_docs/bench_unification.md`.
+This is a Dart workspace (root `pubspec.yaml` lists the members). `tool/check.sh`
+mirrors CI; `tool/bench.sh --suite=path|geometry` runs the benchmark suites.
 
 ## Hard rules
 
-These are non-negotiable. If following them seems impossible for a given task,
-stop and ask rather than bending a rule.
+Non-negotiable. If a rule seems impossible for a task, stop and ask rather than
+bend it.
 
-**No native bindings in `packages/fast_path/lib/`.**
-No `dart:ffi`, `dart:io`, or `dart:ui` imports. The package must run on plain
-Dart VMs with no Flutter dependency. `dart:ui` is allowed only inside
-`packages/fast_path_conformance/`.
+### Every pure-Dart library (`fast_path`, `fast_geometry`, `bench_core`)
 
-**Mutation lives on `PathBuilder`. Queries live on `Path`.**
-`Path` is immutable — never add a mutating method to it. Never add a query
-method or derived cache to `PathBuilder`. The split is load-bearing; see
-DESIGN.md §4.1 for why.
+- **No native bindings in `lib/`.** No `dart:ffi`, `dart:io`, or `dart:ui`
+  imports — these packages must run on plain Dart VMs. `dart:ui` is allowed only
+  in the Flutter-only packages (`fast_path_conformance`, `fast_path_bench_flutter`,
+  the future `fast_path_flutter`).
+- **Every public method ships with tests and a benchmark** before it is "done."
+  Performance is the pitch, so an operation that can't be measured can't be
+  defended. The *kind* of test and benchmark differs per package (below).
+- **Be allocation-conscious on hot paths.** Don't allocate per call in inner
+  loops; reuse buffers and inline scalars.
 
-**Parity with `dart:ui.Path` is the contract.**
-Every public method on `PathBuilder` or `Path` is a behavioral parity claim.
-When the correct behavior is unclear, observe actual `dart:ui.Path` behavior
-and pin it in a parity test before implementing. "Almost like Flutter's Path"
-is not acceptable.
+### `fast_path`
 
-**No allocations in hot paths.**
-Builder methods append to `Uint8List`/`Float32List` buffers in place. Query
-methods read those buffers in place. No `Offset`, `List`, or other heap
-objects allocated per call in inner loops.
+- **Mutation lives on `PathBuilder`. Queries live on `Path`.** `Path` is
+  immutable — never add a mutating method to it; never add a query method or
+  derived cache to `PathBuilder`. The split is load-bearing; see
+  `packages/fast_path/DESIGN.md` §4.1.
+- **Parity with `dart:ui.Path` is the contract.** Every public method on
+  `PathBuilder`/`Path` is a behavioral parity claim. When the correct behavior
+  is unclear, observe actual `dart:ui.Path` behavior and pin it in a parity test
+  before implementing. "Almost like Flutter's Path" is not acceptable.
+- **Use `fast_geometry` types in the signature**, not raw engine shapes — a
+  transform argument is a `Matrix`, not a `Float64List` (see `add-path-api` §3).
+  Names, order, and defaults still track `dart:ui`.
+- **No per-call allocations.** Builder methods append to `Uint8List`/`Float32List`
+  buffers in place; query methods read them in place. No `Offset`/`List` per call.
+- **Parity test required** in `packages/fast_path_conformance/test/parity/`
+  (replays the same call sequence on `fast_path` and `dart:ui.Path`, within the
+  tolerances in `packages/fast_path/DESIGN.md` §8.2), **plus** a benchmark in
+  `packages/fast_path_bench/lib/src/` and a `dart:ui` counterpart in
+  `packages/fast_path_bench_flutter/lib/src/ui_benchmarks.dart`. See
+  `skills/add-path-api/SKILL.md`.
 
-**Parity tests are required before a method is done.**
-Every new method needs a passing test in
-`packages/fast_path_conformance/test/parity/` that replays the same call
-sequence on both `fast_path` and `dart:ui.Path` and asserts agreement within
-the tolerances documented in DESIGN.md §8.2.
+### `fast_geometry`
 
-**Benchmarks are required before a method is done.**
-Every new public method needs a benchmark in
-`packages/fast_path_bench/lib/src/` (and registered in
-`packages/fast_path_bench/lib/benchmarks.dart`) plus a `dart:ui`
-counterpart in `packages/fast_path_bench_flutter/lib/src/ui_benchmarks.dart`.
-"It's not on the hot path" is not an escape hatch — the project's pitch
-is performance, so every operation has to be measurable. Both benchmarks
-XOR their result into the `FastPathBenchmark.sink` so the compiler can't
-elide the work. See `skills/add-path-api/SKILL.md` §9 for the full shape.
+- **`Matrix` is deeply immutable.** Every "mutating" operation returns a new
+  instance; no setters.
+- **`package:vector_math`'s `Matrix4` is a correctness *oracle*, not an API
+  contract.** Validate that `Matrix` produces the same numbers for the same
+  transform — but design the API for our immutable, 2D-first type; do not copy
+  `Matrix4`'s mutable/3D signatures.
+- **The canonical-lowering representation is load-bearing.** Every result must
+  be produced in its most-specific shape, or `==`/`hashCode` and the
+  `isSimple2d`/`isTranslation2d` fast paths break. Representation changes are
+  cross-cutting — propose, don't land unilaterally.
+- **Unit + `vector_math` parity tests** (both run under a plain `dart test`,
+  since `vector_math` is a pure-Dart dev dep) **plus a paired benchmark** in
+  `packages/fast_geometry/benchmark/src/matrix_catalog.dart` (subject vs
+  `Matrix4`, folded into the anti-DCE sink). See `skills/add-matrix-api/SKILL.md`.
+
+### `bench_core`
+
+- **Domain-agnostic.** Depends only on `benchmark_harness`; never on `fast_path`,
+  `fast_geometry`, `vector_math`, or `dart:ui`. It knows how to measure,
+  normalize, blackhole, pair, and report — nothing about paths or matrices.
 
 ## Skills
 
-Read and follow the appropriate skill file before starting these tasks:
+Read and follow the appropriate skill before starting:
 
-- Adding or changing anything on `PathBuilder` or `Path` →
-  `skills/add-path-api/SKILL.md`
-- Adding or changing anything on `fast_geometry`'s `Matrix` →
-  `skills/add-matrix-api/SKILL.md`
+- Adding/changing `PathBuilder` or `Path` → `skills/add-path-api/SKILL.md`
+- Adding/changing `fast_geometry`'s `Matrix` → `skills/add-matrix-api/SKILL.md`
 - Porting an algorithm from Skia or the Flutter engine →
   `skills/port-from-skia/SKILL.md`
 
 ## Escalate, don't decide alone
 
-Raise these with the user rather than resolving them unilaterally:
+Raise these rather than resolving them unilaterally:
 
-- A proposed addition that has no `dart:ui.Path` equivalent.
-- A behavior where `dart:ui.Path` is itself buggy or undocumented and we must
-  pick a behavior.
-- Anything that would require importing `dart:ui` from `packages/fast_path/lib/`.
-- A method that seems like it should mutate a `Path` rather than return a new one.
-- A port from Skia where upstream behavior contradicts what `dart:ui.Path`
-  actually does.
+- **fast_path:** an addition with no `dart:ui.Path` equivalent; a behavior where
+  `dart:ui.Path` is itself buggy/undocumented; anything needing `dart:ui` inside
+  `lib/`; a method that seems like it should mutate a `Path`; a Skia port that
+  contradicts `dart:ui.Path`.
+- **fast_geometry:** an operation with no sensible immutable/2D analog; a case
+  where matching `Matrix4` numerically would force a non-canonical `Matrix`; any
+  change to the representation (`_MatrixExtension`, the inline core, lowering).

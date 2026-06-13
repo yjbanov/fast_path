@@ -5,7 +5,9 @@ description: Use whenever a method, getter, setter, constructor, or related type
 
 # Adding or extending the PathBuilder / Path API surface
 
-`fast_path` splits `dart:ui.Path` into two classes (see DESIGN.md §4.1):
+`fast_path` splits `dart:ui.Path` into two classes (see
+`packages/fast_path/DESIGN.md` §4.1; the `DESIGN.md` §-references throughout
+this skill all point to that file):
 
 - **`PathBuilder`** — mutable, write-optimized. All construction primitives
   (`moveTo`, `lineTo`, `cubicTo`, `addRect`, …) live here.
