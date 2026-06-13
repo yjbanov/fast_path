@@ -137,4 +137,83 @@ void main() {
       expect(empty.transform(_scale(3, 3)).getBounds(), equals(Rect.zero));
     });
   });
+
+  // Characterization tests: these pin the exact current behavior of the
+  // matrix-handling code (which entries are read, the perspective trigger, the
+  // column-major index mapping) so a refactor of how the matrix is consumed
+  // is provably behavior-preserving. They are deliberately precise, not just
+  // bounds/contains assertions.
+  group('Path.transform — representation characterization', () {
+    test('the z-column entries are ignored (points are treated as z=0)', () {
+      // 2D identity, with arbitrary junk in the seven entries the 2D point map
+      // never reads: m20(2) m21(6) m02(8) m12(9) m22(10) m32(11) m23(14).
+      final junk = Float64List.fromList([
+        1, 0, 7, 0, // 0=m00 1=m10 2=m20(junk) 3=m30
+        0, 1, 9, 0, // 4=m01 5=m11 6=m21(junk) 7=m31
+        3, 4, 5, 6, // 8=m02 9=m12 10=m22 11=m32  (all junk)
+        0, 0, 8, 1, // 12=m03 13=m13 14=m23(junk) 15=m33
+      ]);
+      final p = _unitSquare();
+      // Identical to an identity transform — the junk must not leak in.
+      expect(p.transform(junk), equals(p));
+    });
+
+    test('off-diagonal shear reads m01 (col-major index 4), applied to y', () {
+      // x-shear: x' = x + 2y, y' = y. A migration that swapped m01/m10 would
+      // map (0,5) to (0,5) instead of (10,5).
+      final shear = Float64List.fromList([
+        1, 0, 0, 0, // col0: m00=1, m10=0
+        2, 1, 0, 0, // col1: m01=2, m11=1
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+      ]);
+      final src = (PathBuilder()
+            ..moveTo(0, 0)
+            ..lineTo(10, 0)
+            ..lineTo(0, 5)
+            ..close())
+          .build();
+      final expected = (PathBuilder()
+            ..moveTo(0, 0)
+            ..lineTo(10, 0)
+            ..lineTo(10, 5) // (0,5) -> (0 + 2*5, 5)
+            ..close())
+          .build();
+      expect(src.transform(shear), equals(expected));
+    });
+
+    test('perspective triggered by m33 != 1 alone applies the divide', () {
+      // No m30/m31, but m33 = 2 -> w = 2 everywhere -> uniform half scale.
+      // A trigger that only checked m30/m31 would skip the divide.
+      final m = Float64List.fromList([
+        1, 0, 0, 0, //
+        0, 1, 0, 0, //
+        0, 0, 1, 0, //
+        0, 0, 0, 2, // index 15 = m33 = 2
+      ]);
+      final rect =
+          (PathBuilder()..addRect(const Rect.fromLTRB(0, 0, 10, 20))).build();
+      expect(rect.transform(m).getBounds(),
+          equals(const Rect.fromLTRB(0, 0, 5, 10)));
+    });
+
+    test('every contour is transformed', () {
+      final two = (PathBuilder()
+            ..addRect(const Rect.fromLTRB(0, 0, 10, 10))
+            ..addRect(const Rect.fromLTRB(20, 0, 30, 10)))
+          .build();
+      final scaled = two.transform(_scale(2, 2));
+      expect(scaled.getBounds(), equals(const Rect.fromLTRB(0, 0, 60, 20)));
+      expect(scaled.contains(const Offset(10, 10)), isTrue); // first rect 0..20
+      expect(scaled.contains(const Offset(50, 10)), isTrue); // second 40..60
+      expect(scaled.contains(const Offset(30, 10)), isFalse); // gap
+    });
+
+    test('negative scale reflects across the axis', () {
+      final rect =
+          (PathBuilder()..addRect(const Rect.fromLTRB(2, 0, 8, 4))).build();
+      expect(rect.transform(_scale(-1, 1)).getBounds(),
+          equals(const Rect.fromLTRB(-8, 0, -2, 4)));
+    });
+  });
 }

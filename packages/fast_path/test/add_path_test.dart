@@ -151,4 +151,69 @@ void main() {
       expect(extended, equals(explicit));
     });
   });
+
+  // Characterization tests pinning the exact matrix behavior of the shared
+  // append machinery before a refactor of how the matrix is consumed.
+  group('matrix4 behavior — characterization', () {
+    final junk = Float64List.fromList([
+      1, 0, 7, 0, // 2=m20(junk)
+      0, 1, 9, 0, // 6=m21(junk)
+      3, 4, 5, 6, // 8,9,10,11 = m02,m12,m22,m32 (junk)
+      0, 0, 8, 1, // 14=m23(junk)
+    ]);
+
+    test('addPath ignores the z-column entries', () {
+      final src = _triangle();
+      final out =
+          (PathBuilder()..addPath(src, Offset.zero, matrix4: junk)).build();
+      expect(out, equals(src)); // junk in z entries must not leak in
+    });
+
+    test('addPath perspective + non-zero offset == transform then translate', () {
+      // Pins the documented "transform by matrix4, then translate by offset"
+      // model: the offset is applied after the homogeneous divide. (This is
+      // the corner that diverges from dart:ui, so it is a unit test, not a
+      // parity test.)
+      final persp = Float64List.fromList([
+        1, 0, 0, 0.004, //
+        0, 1, 0, 0.002, //
+        0, 0, 1, 0, //
+        0, 0, 0, 1,
+      ]);
+      final src =
+          (PathBuilder()..addRect(const Rect.fromLTRB(0, 0, 40, 30))).build();
+      final viaAddPath =
+          (PathBuilder()..addPath(src, const Offset(100, 50), matrix4: persp))
+              .build();
+      final viaCompose = src.transform(persp).shift(const Offset(100, 50));
+      expect(viaAddPath, equals(viaCompose));
+    });
+
+    test('extendWithPath transforms the joined first point and the rest', () {
+      // src points (5,0),(5,5); scale x2 -> (10,0),(10,10); + offset (1,1) ->
+      // (11,1),(11,11). The opening moveTo(5,0) becomes the join lineTo.
+      final scale2 = Float64List.fromList([
+        2, 0, 0, 0, //
+        0, 2, 0, 0, //
+        0, 0, 1, 0, //
+        0, 0, 0, 1,
+      ]);
+      final src = (PathBuilder()
+            ..moveTo(5, 0)
+            ..lineTo(5, 5)
+            ..close())
+          .build();
+      final extended = (PathBuilder()
+            ..moveTo(0, 0)
+            ..extendWithPath(src, const Offset(1, 1), matrix4: scale2))
+          .build();
+      final explicit = (PathBuilder()
+            ..moveTo(0, 0)
+            ..lineTo(11, 1) // joined first point, transformed
+            ..lineTo(11, 11) // remaining point, transformed
+            ..close())
+          .build();
+      expect(extended, equals(explicit));
+    });
+  });
 }
