@@ -76,4 +76,29 @@ void main() {
       expect(Matrix.simple2d(scaleX: 0, scaleY: 3, dx: 1, dy: 1).invert(), isNull);
     });
   });
+
+  group('add / negate parity (element-wise, matches Matrix4)', () {
+    test('identity + identity doubles the full diagonal', () {
+      final sum = Matrix.identity + Matrix.identity;
+      expect(sum.m00, 2.0);
+      expect(sum.m11, 2.0);
+      expect(sum.m22, 2.0); // the tail is summed too, not left at 1
+      expect(sum.m33, 2.0);
+    });
+
+    test('affine + affine', () {
+      final a = Matrix.rotationZ(0.5);
+      final a4 = vm.Matrix4.rotationZ(0.5);
+      expectMatches(a + a, a4 + a4, tol: 1e-12);
+    });
+
+    test('general + general', () {
+      expectMatches(_general() + _general(), _general4() + _general4(),
+          tol: 1e-12);
+    });
+
+    test('negate: general', () {
+      expectMatches(-_general(), _general4()..negate(), tol: 1e-12);
+    });
+  });
 }

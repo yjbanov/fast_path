@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- `Matrix` (performance): widened the inline core from four doubles to six, so
+  the full 2D-affine block (the 2x2 linear part plus 2D translation) is stored
+  inline and the extension holds only the 3D/perspective tail. Rotation, skew,
+  and general 2D-affine matrices — the common UI case — no longer allocate an
+  extension. Net effect across the benchmark suite: large wins on affine
+  instantiation, factories, invert, determinant, equality, hashing, and
+  geometry transforms (several now faster than `package:vector_math`); modest
+  regressions on pure diagonal-scale cases (the wider object and the dropped
+  diagonal-specific multiply fast path). `transformRect` is now allocation-free.
+- `Matrix` (fix): `operator +` and unary `operator -` are now true element-wise
+  operations matching `Matrix4` (the previous versions ignored the `m22`/`m33`
+  tail for extension-free matrices). Affine `+` reuses a shared constant tail,
+  so it stays allocation-light.
+
 - `Matrix`: added structural `operator ==`, `hashCode`, and `toString`. Equality
   and hashing exploit the canonical-lowering representation (a `_rest`
   null/non-null mismatch decides inequality without comparing the extension) and

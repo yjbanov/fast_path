@@ -180,3 +180,26 @@ Two structural causes, two candidate fixes:
 
 The full benchmark suite is the fixed target: any representation change must
 hold or improve every pair, not just the ones it targets.
+
+### Outcome ✅ Done
+
+The inline core was widened from four doubles to six (cause #1). Across the
+31-pair matrix suite this produced 12 clear wins and 3 modest regressions:
+
+- **Wins (the targeted affine cases):** affine/rotation instantiation ~2x,
+  `rotationZ` factory ~2x, `invert` of an affine/general matrix ~1.6x,
+  `determinant` complex ~2.2x, `==` complex ~1.6x, `hashCode` complex ~3.6x,
+  `rotatedZ` compose ~1.3x, `transformVector` ~2x, `transformRect` ~3x
+  (also allocation-free now, cause #2). Several of these now beat `Matrix4`.
+- **Regressions:** pure diagonal-scale cases — `simple × simple` multiply
+  (~1.5x), `translated` compose (~1.4x), and `hashCode` of a simple matrix
+  (~1.3x). These stem from the wider object and from dropping the
+  diagonal-specific multiply fast path (re-adding it would slow the more common
+  rotation path, so it was left out). Absolute times stay small (≤60 ns).
+
+Along the way, `operator +` / unary `operator -` were corrected to true
+element-wise semantics (they previously ignored the `m22`/`m33` tail for
+extension-free matrices); affine `+` reuses a shared constant tail to stay
+allocation-light. The 4→6 widening, the affine `*` direct-build, and the
+allocation-free `transformRect` together realize both candidate fixes from this
+section.
