@@ -134,5 +134,33 @@ void main() {
       expect(actual.right, closeTo(expected.right, _tol));
       expect(actual.bottom, closeTo(expected.bottom, _tol));
     });
+
+    test('transformRect (perspective bounds)', () {
+      final pm = Matrix.transform(
+        m00: 2, m01: 0.5, m02: 0, m03: 1,
+        m10: 0.3, m11: 3, m12: 0, m13: 2,
+        m20: 0, m21: 0, m22: 1, m23: 0,
+        m30: 0.1, m31: 0.2, m32: 0, m33: 1,
+      );
+      final pm4 = vm.Matrix4(
+        2, 0.3, 0, 0.1,
+        0.5, 3, 0, 0.2,
+        0, 0, 1, 0,
+        1, 2, 0, 1,
+      );
+      const rect = Rect.fromLTRB(-1, -1, 1, 1);
+      final expected = _cornerBounds(pm4, rect);
+      final actual = pm.transformRect(rect);
+      expect(actual.left, closeTo(expected.left, _tol));
+      expect(actual.top, closeTo(expected.top, _tol));
+      expect(actual.right, closeTo(expected.right, _tol));
+      expect(actual.bottom, closeTo(expected.bottom, _tol));
+    });
+
+    test('transformPoint with NaN yields NaN offset', () {
+      final nanMatrix = Matrix.simple2d(scaleX: double.nan, scaleY: 1, dx: 0, dy: 0);
+      final pt = nanMatrix.transformPoint(const Offset(1, 1));
+      expect(pt.dx.isNaN, isTrue);
+    });
   });
 }

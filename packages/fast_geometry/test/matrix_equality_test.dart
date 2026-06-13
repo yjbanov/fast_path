@@ -20,6 +20,11 @@ void main() {
         equals(Matrix.transform2d(
             scaleX: 2, scaleY: 3, dx: 5, dy: 6, k1: 0.5, k2: 0.6)),
       );
+      // Perspective / 3D.
+      expect(
+        Matrix.perspective(1.0, 1.5, 0.1, 100),
+        equals(Matrix.perspective(1.0, 1.5, 0.1, 100)),
+      );
     });
 
     test('differing matrices compare unequal', () {
@@ -32,6 +37,21 @@ void main() {
       final g2 =
           Matrix.transform2d(scaleX: 2, scaleY: 3, dx: 5, dy: 6, k1: 0.5, k2: 0.7);
       expect(g1, isNot(equals(g2)));
+    });
+
+    test('general matrices differing only in an extension entry are unequal', () {
+      // The shear terms (k1/k2 above) are inline now, so that case short-circuits
+      // before the extension compare. m22 lives in the extension, so differing
+      // there is what actually drives _MatrixExtension._equals to return false.
+      Matrix withM22(double m22) => Matrix.transform(
+            m00: 1, m01: 0, m02: 0, m03: 0,
+            m10: 0, m11: 1, m12: 0, m13: 0,
+            m20: 0, m21: 0, m22: m22, m23: 0,
+            m30: 0, m31: 0, m32: 0, m33: 1,
+          );
+      expect(withM22(5).isSimple2d, isFalse); // both are general (have _rest)
+      expect(withM22(5), isNot(equals(withM22(6))));
+      expect(withM22(5), equals(withM22(5))); // equal extensions -> equal
     });
 
     test('uses the canonical-lowering invariant: a lowered general matrix '
@@ -82,6 +102,10 @@ void main() {
               scaleX: 2, scaleY: 3, dx: 5, dy: 6, k1: 0.5, k2: 0.6)
           .hashCode;
       expect(h1, equals(h2));
+      
+      final ph1 = Matrix.perspective(1.0, 1.5, 0.1, 100).hashCode;
+      final ph2 = Matrix.perspective(1.0, 1.5, 0.1, 100).hashCode;
+      expect(ph1, equals(ph2));
     });
 
     test('+0.0 and -0.0 hash equally (consistent with ==)', () {

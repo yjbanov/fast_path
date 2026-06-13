@@ -62,6 +62,11 @@ void main() {
         ..setEntry(1, 3, 5);
       expect(s.determinant(), closeTo(s4.determinant(), 1e-12));
     });
+    test('affine with shear', () {
+      final a = Matrix.rotationZ(0.5);
+      final a4 = vm.Matrix4.rotationZ(0.5);
+      expect(a.determinant(), closeTo(a4.determinant(), 1e-12));
+    });
   });
 
   group('invert parity', () {
@@ -72,8 +77,37 @@ void main() {
     });
 
     test('singular returns null', () {
-      // Zero X-scale -> determinant 0.
+      // Zero X-scale -> determinant 0 (affine fast path).
       expect(Matrix.simple2d(scaleX: 0, scaleY: 3, dx: 1, dy: 1).invert(), isNull);
+    });
+
+    test('general (3D) singular returns null', () {
+      // A zero row makes the determinant exactly 0.0, exercising the null
+      // return in the *general* inverse path (not just the affine fast path).
+      // Note: invert() uses an exact `det == 0` test, so this needs a
+      // structurally-singular matrix, not merely a near-singular one.
+      final singular = Matrix.transform(
+        m00: 0, m01: 0, m02: 0, m03: 0, // zero row
+        m10: 1, m11: 2, m12: 3, m13: 4,
+        m20: 5, m21: 6, m22: 7, m23: 8,
+        m30: 9, m31: 1, m32: 2, m33: 3,
+      );
+      expect(singular.isSimple2d, isFalse); // confirm the general path
+      expect(singular.determinant(), 0.0);
+      expect(singular.invert(), isNull);
+    });
+
+    test('affine with shear', () {
+      final a = Matrix.rotationZ(0.5);
+      final a4 = vm.Matrix4.rotationZ(0.5);
+      expectMatches(a.invert()!, vm.Matrix4.inverted(a4), tol: 1e-12);
+    });
+
+    test('invert of NaN matrix yields a NaN matrix (not null)', () {
+      final nanMatrix = Matrix.simple2d(scaleX: double.nan, scaleY: 1, dx: 0, dy: 0);
+      final inv = nanMatrix.invert();
+      expect(inv, isNotNull);
+      expect(inv!.m00.isNaN, isTrue);
     });
   });
 
