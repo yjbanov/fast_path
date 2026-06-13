@@ -94,19 +94,25 @@ side.
 When the right home is unclear, ask. Putting a query on `PathBuilder` or a
 mutator on `Path` undermines the split's whole point (DESIGN.md §4.1).
 
-### 3. Match the signature exactly
+### 3. Match the signature (names, order, defaults — but fast_geometry types)
 
 Use the same parameter names, parameter order, and defaults as dart:ui's
 equivalent. Dart 3 records and named arguments mean callers will write
 `builder.arcToPoint(arcEnd: ..., radius: ...)`; differing names break that.
 
-If `dart:ui.Path` takes `Float64List matrix4`, take `Float64List matrix4`.
-Don't "improve" it to `Matrix4` — users who already work with engine code
-expect the engine shape.
+For the argument *representation*, use `fast_geometry`'s structured types
+rather than dart:ui's raw engine shapes. `fast_path` is built on `fast_geometry`
+and speaks its vocabulary: a 4x4 transform is a `Matrix`, **not** a
+`Float64List matrix4` (callers holding engine / `Matrix4` data bridge with the
+`Float64List.toMatrix()` extension). Points and rects are `Offset` and `Rect`
+for the same reason. The transform's *behavior* still matches dart:ui exactly —
+only the argument type is the library's own.
 
-The one shape divergence is the receiver: `dart:ui.Path.lineTo(...)`
-becomes `PathBuilder.lineTo(...)` on our side. Document that explicitly
-in the dartdoc (see step 6) so users porting code know what to substitute.
+There are thus two deliberate shape divergences from dart:ui. The first is the
+receiver: `dart:ui.Path.lineTo(...)` becomes `PathBuilder.lineTo(...)` on our
+side. The second is argument representation (`Matrix`/`Offset`/`Rect` over raw
+engine types). Document both explicitly in the dartdoc (see step 6) so users
+porting code know what to substitute.
 
 If a fast_path-specific helper genuinely improves DX, expose it as an
 **extension method** in a separate library, not as a method on
@@ -267,7 +273,9 @@ wrong, dig in before merging.
       `Path` for queries and pure transforms.
 - [ ] `dart:ui.Path`'s equivalent has the same signature — parameter
       names, order, defaults — modulo the receiver class.
-- [ ] Parameter types match dart:ui (e.g. `Float64List` not `Matrix4`).
+- [ ] Argument types use `fast_geometry`'s structured types (e.g. `Matrix`,
+      not `Float64List matrix4`; `Offset` / `Rect` for points and rects),
+      while parameter names, order, and defaults still match dart:ui.
 - [ ] Documented edge cases (empty path, NaN, redundant calls) are
       matched.
 - [ ] No `dart:ffi`, `dart:io`, or `dart:ui` import in `lib/`.
