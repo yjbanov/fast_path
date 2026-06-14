@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:fast_geometry/fast_geometry.dart';
+import 'package:meta/meta.dart';
 import 'path_fill_type.dart';
 import 'verbs.dart';
 
@@ -2086,6 +2087,138 @@ final class Path {
     _flattenConic(xs, ys, x0, y0, l1x, l1y, mx, my, newW, depth + 1);
     _flattenConic(xs, ys, mx, my, r1x, r1y, x2, y2, newW, depth + 1);
   }
+
+  /// Flattens this path into closed polygon contours for boolean ops
+  /// ([Path.combine]).
+  ///
+  /// Every contour is treated as **closed**: open contours are implicitly
+  /// closed back to their `moveTo`, matching how `dart:ui` resolves a path
+  /// into a filled region for `combine`. Curves are adaptively subdivided at
+  /// the same tolerance as the metric flattener ([_flattenTolerance]) — tighter
+  /// than the parity gate's boundary band, so flattening never flips a
+  /// containment sample (see design_docs/boolean_ops.md §4).
+  ///
+  /// Each contour is a packed `Float64List` of `[x0, y0, x1, y1, …]` with **no
+  /// duplicated closing vertex** — the ring wraps implicitly, so the sweep adds
+  /// the final edge from the last vertex back to the first. Coordinates are
+  /// widened to f64 for the sweep arithmetic (DESIGN.md §5: store f32, compute
+  /// f64). Contours with fewer than three distinct vertices enclose no area and
+  /// are dropped — they cannot affect a boolean result.
+  ///
+  /// [fillType] is intentionally *not* applied here: it is metadata the sweep
+  /// consumes to decide each operand's interior, not a property of the
+  /// flattened geometry.
+  List<Float64List> _flattenForOps() {
+    final contours = <Float64List>[];
+    if (_verbs.isEmpty) {
+      return contours;
+    }
+
+    final xs = <double>[];
+    final ys = <double>[];
+    var startX = 0.0;
+    var startY = 0.0;
+    var curX = 0.0;
+    var curY = 0.0;
+    var open = false;
+    var pointIdx = 0;
+    var weightIdx = 0;
+
+    void finalizeContour() {
+      if (open) {
+        _emitRing(contours, xs, ys);
+      }
+      open = false;
+      xs.clear();
+      ys.clear();
+    }
+
+    for (var i = 0; i < _verbs.length; i++) {
+      switch (_verbs[i]) {
+        case verbMove:
+          finalizeContour();
+          startX = curX = _points[pointIdx];
+          startY = curY = _points[pointIdx + 1];
+          xs.add(startX);
+          ys.add(startY);
+          open = true;
+          pointIdx += 2;
+        case verbLine:
+          curX = _points[pointIdx];
+          curY = _points[pointIdx + 1];
+          xs.add(curX);
+          ys.add(curY);
+          pointIdx += 2;
+        case verbQuad:
+          final cx = _points[pointIdx];
+          final cy = _points[pointIdx + 1];
+          final ex = _points[pointIdx + 2];
+          final ey = _points[pointIdx + 3];
+          _flattenQuad(xs, ys, curX, curY, cx, cy, ex, ey, 0);
+          curX = ex;
+          curY = ey;
+          pointIdx += 4;
+        case verbConic:
+          final cx = _points[pointIdx];
+          final cy = _points[pointIdx + 1];
+          final ex = _points[pointIdx + 2];
+          final ey = _points[pointIdx + 3];
+          final w = _conicWeights[weightIdx++];
+          _flattenConic(xs, ys, curX, curY, cx, cy, ex, ey, w, 0);
+          curX = ex;
+          curY = ey;
+          pointIdx += 4;
+        case verbCubic:
+          final c1x = _points[pointIdx];
+          final c1y = _points[pointIdx + 1];
+          final c2x = _points[pointIdx + 2];
+          final c2y = _points[pointIdx + 3];
+          final ex = _points[pointIdx + 4];
+          final ey = _points[pointIdx + 5];
+          _flattenCubic(xs, ys, curX, curY, c1x, c1y, c2x, c2y, ex, ey, 0);
+          curX = ex;
+          curY = ey;
+          pointIdx += 6;
+        case verbClose:
+          // The ring is closed implicitly by the wrap-around edge; just snap
+          // the cursor back so a following implicit `moveTo` starts cleanly.
+          curX = startX;
+          curY = startY;
+      }
+    }
+    finalizeContour();
+    return contours;
+  }
+
+  /// Packs the accumulated [xs]/[ys] polyline into a closed ring and appends it
+  /// to [contours], dropping a redundant closing vertex and any ring that
+  /// encloses no area (fewer than three distinct vertices).
+  static void _emitRing(
+    List<Float64List> contours,
+    List<double> xs,
+    List<double> ys,
+  ) {
+    var end = xs.length;
+    // Some inputs encode the closing point explicitly (last == first); the ring
+    // wraps implicitly, so drop the duplicate.
+    if (end >= 2 && xs[end - 1] == xs[0] && ys[end - 1] == ys[0]) {
+      end--;
+    }
+    if (end < 3) {
+      return;
+    }
+    final ring = Float64List(end * 2);
+    for (var k = 0; k < end; k++) {
+      ring[k * 2] = xs[k];
+      ring[k * 2 + 1] = ys[k];
+    }
+    contours.add(ring);
+  }
+
+  /// Test-only view of [_flattenForOps]. Used by the boolean-ops flattening
+  /// unit tests before `combine` is wired; not part of the public API.
+  @visibleForTesting
+  List<Float64List> debugFlattenForOps() => _flattenForOps();
 }
 
 /// An iterable of [PathMetric], one per contour, as returned by
