@@ -204,10 +204,29 @@ contains) are single-pass over the verb stream.
 A separate `Float32List _conicWeights` holds weights for `conic` verbs only.
 We follow Skia's convention here so that ports are mechanical.
 
-`Float32List` (not `Float64List`) is the working choice: Path coordinates in
-Skia and Flutter are 32-bit floats, so f32 keeps us behavior-compatible and
-halves memory traffic. We will revisit if parity tests show f32 rounding
-divergences that matter.
+`Float32List` is the current storage choice — but **storage width and math
+width are independent, and only storage is actually ours to pick.** Dart has no
+32-bit float arithmetic: every `Float32List` read widens to f64 (exactly — every
+f32 is a representable f64), all arithmetic runs in f64, and the result narrows
+to f32 only on store. So our pipeline is **f64 math with f32 quantization at
+storage boundaries**, whereas Skia is **f32 math throughout** (it rounds to f32
+at every intermediate step).
+
+A consequence worth stating plainly, because an earlier draft of this section
+got it wrong: **f32 storage does not give us bit-exact parity with Skia/Flutter,
+and no storage choice can.** Our divergence from Skia comes from doing f64 math
+where Skia does f32 math — which Dart forces on us regardless of what we store.
+f32 storage buys only (a) half the memory/bandwidth for point buffers and (b)
+*coordinate-grid* compatibility — our stored endpoints land on the same
+quantization grid `dart:ui` uses, which marginally helps `getBounds` and
+round-trips at storage boundaries, but does nothing for intermediate math.
+
+Because parity is tolerance-based (§8.2), not bit-exact, it does **not**
+discriminate between f32 and f64 storage: f64 is strictly more accurate than
+f32, so it cannot *break* a tolerance the f32 path already meets. Storage width
+is therefore an open, benchmark-driven question decided on its own merits
+(memory vs. precision/simplicity/speed), not a parity mechanism — see §11.
+Algorithms always compute in f64.
 
 ### 5.2 PathBuilder fields (mutable, write-optimized)
 
@@ -376,6 +395,13 @@ behavior of silently ignoring).
 
 ### 8.2 Parity tests against `dart:ui.Path`
 
+The parity we claim is **algorithmic and tolerance-based, not bit-exact.** We
+match `dart:ui.Path`'s *behavior* — the same algorithms, edge cases, fill rules,
+and results to within documented numeric tolerances — but not its exact bit
+patterns, because Dart computes in f64 where Skia computes in f32 (see §5.1).
+Being more accurate than Skia's f32 math means our answers differ from Skia's by
+roughly Skia's own rounding error; the tolerances below absorb that.
+
 Lives in a `test/parity/` directory and only runs under Flutter (`flutter
 test`). For each operation we replay the same call sequence on both sides
 — a `fast_path.PathBuilder` followed by `.build()` on our side, and a
@@ -461,10 +487,18 @@ the next.
 
 ## 11. Open questions
 
-- **f32 vs f64 internally.** Skia uses f32; a parity-first design follows.
-  But Dart's hot loops over `Float64List` are sometimes faster than over
-  `Float32List` because of how doubles are unboxed. Decide after M1 with
-  benchmarks.
+- **f32 vs f64 *storage*.** Not a parity question (§5.1 establishes that f32
+  storage buys no math parity — Dart computes in f64 either way; parity is
+  tolerance-based and indifferent to storage width). It is purely a
+  memory-vs-precision/speed tradeoff: f32 halves point-buffer memory and
+  bandwidth (matters only for large, cache-spilling paths); f64 is simpler,
+  loses no precision across store→reload chains (build → transform → combine),
+  and Dart's hot loops over `Float64List` are sometimes *faster* than over
+  `Float32List` because of how doubles are unboxed. Decide with an A/B of
+  `_points` width on the existing benchmark suite (AOT + dart2js/dart2wasm). The
+  prior (DESIGN §5.1, post-M1) leans f64-for-simplicity unless f32 shows a clear
+  memory or speed win; either way the choice gets documented on its merits, and
+  algorithms keep computing in f64.
 - **SIMD via `Float64x2` extension types.** `Offset(dx, dy)` and
   `Size(width, height)` are each a pair of doubles — exactly the shape of
   `Float64x2` from `dart:typed_data`. Dart 3 extension types let us define

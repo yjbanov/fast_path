@@ -254,6 +254,7 @@ curve-preserving.
 
 ### Still open
 
-- **f32 vs f64 in the sweep.** The flattener produces f32-stored points; run
-  the Martinez arithmetic in f64 (DESIGN.md §5 convention: store f32, compute
-  f64) and revisit only if parity sampling diverges. Decide during M4a step 3.
+- **Sweep arithmetic precision — settled: f64.** The Martinez sweep runs in f64
+  regardless of how points are *stored* (storage width is a separate, open
+  question — fast_path/DESIGN.md §5.1 and §11). `_flattenForOps` already widens
+  to f64 for exactly this reason. Revisit only if parity sampling diverges.
