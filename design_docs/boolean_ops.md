@@ -221,11 +221,15 @@ curve-preserving.
 0. **Parity probe** — ✅ done. Findings folded into §4 and §8 and pinned as
    regression assertions in
    `packages/fast_path_conformance/test/parity/combine_oracle_test.dart`.
-1. `PathOperation` enum + export + dartdoc (cross-references `dart:ui`).
-2. Contour-flattening helper reusing the metrics flattener; closed-polygon
-   extraction with a flatness tighter than the parity epsilon.
-3. Martinez–Rueda sweep: event queue, sweep-line status, edge labeling
-   (in/out, per-polygon), all five ops from one labeled subdivision.
+1. ✅ done (commit `e660364`). `PathOperation` enum + export + dartdoc
+   (cross-references `dart:ui`).
+2. ✅ done (commit `e660364`). Contour-flattening helper (`Path._flattenForOps`)
+   reusing the metrics flattener; closed-polygon extraction (no duplicated
+   closing vertex, arealess contours dropped) at the metric flatness tolerance.
+3. ✅ done (commit `ce86ebe`). Martinez–Rueda sweep in `lib/src/martinez.dart`:
+   binary-heap event queue, sorted-list sweep-line, edge labeling, all four
+   primitive ops from one labeled subdivision (clean-room from the 2009 paper,
+   attribution-preserving adaptation of the MIT w8r/martinez reference).
 4. Output assembly into `PathBuilder` → `Path`; result fill type per the probe.
 5. `Path.combine` wiring; empty/degenerate short-circuits.
 6. Unit tests (§5.1), then parity tests + generated corpus (§5.2) until green.
