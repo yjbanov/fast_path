@@ -19,6 +19,23 @@
 
 ### Added
 
+- M4a — boolean ops (`Path.combine`).
+  - `PathOperation` enum (`difference`, `intersect`, `union`, `xor`,
+    `reverseDifference`) and `static Path.combine(op, a, b)`, mirroring
+    `dart:ui`.
+  - Implemented as a polygonal MVP: both operands are flattened to polygons and
+    combined by a clean-room Martinez–Rueda–Feito sweep
+    (`lib/src/martinez.dart`, attribution-preserving adaptation of the MIT
+    `w8r/martinez` reference). Two documented divergences from `dart:ui`:
+    **polygonal output** (curves are flattened — the result has no curve verbs),
+    and **even-odd interiors** (each operand read under the even-odd rule, the
+    result emitted as `evenOdd` — the fill type `dart:ui` returns; a `nonZero`
+    operand whose own contours overlap may differ).
+  - Verified by unit tests plus a `dart:ui` parity gate (hand-picked cases and a
+    deterministic fuzz corpus comparing containment).
+  - Benchmarks both sides. Current standing: ~13–19× slower than `dart:ui`'s
+    native pathops — correctness-first; a tracked optimization pass is in the
+    DESIGN.md §10 roadmap.
 - M0 — geometry types and the builder/path split.
   - Geometry value types: `Offset`, `Size`, `Rect`, `Radius`, `RRect`,
     `PathFillType`.

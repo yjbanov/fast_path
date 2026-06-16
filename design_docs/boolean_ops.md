@@ -241,10 +241,16 @@ dominates. This gap is the expected standing (§3) and the budget for later work
    map onto the sweep (reverseDifference swaps operands); empty/degenerate
    operands are short-circuited inside `martinezBooleanOp`. Unit tests in
    `test/combine_test.dart`.
-6. Unit tests (§5.1), then parity tests + generated corpus (§5.2) until green.
-7. Benchmarks both sides (§6); run `tool/bench.sh` + `--mode=aot`, quote numbers.
-8. CHANGELOG (`### Added` M4 + the documented polygonal-output divergence);
-   flip DESIGN.md §6.4 and §10 M4 from "deferred" to "M4a done, M4b deferred".
+6. ✅ done (commit `3ba0e5c`). Unit tests (`test/combine_test.dart`) plus the
+   `dart:ui` parity gate (`path_parity_test.dart`): 7 hand-picked shape pairs ×
+   5 ops, and a 40-seed fuzz corpus (overlapping convex polygons, even-odd) ×
+   5 ops. Containment sampling with an 8-neighbour boundary-band exclusion.
+7. ✅ done (commit `6ae84e8`). `combine_{union,intersect,difference,xor}`
+   benchmarks both sides; AOT + flutter-desktop numbers quoted in §6 (~13–19×
+   slower than dart:ui, the expected standing; tracked for optimization).
+8. ✅ done. CHANGELOG `### Added` M4a entry; DESIGN.md §6.4 and §10 flipped to
+   "M4a done, M4b deferred"; a dedicated combine-performance item added to the
+   §10 roadmap.
 
 ## 8. Resolved by the §7.0 probe
 

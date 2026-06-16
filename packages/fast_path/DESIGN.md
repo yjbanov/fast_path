@@ -338,11 +338,22 @@ cached on the immutable `Path` indefinitely (no invalidation needed — see
 
 ### 6.4 `Path.combine(op, a, b)` (boolean ops)
 
-Implementation deferred. The plan is to port Skia's `SkOpBuilder` /
-`SkPathOpsCommon` algorithm. Boolean ops over cubics are notoriously fiddly;
-this is the highest-risk parity surface. We will land it last, behind a
-property test corpus that fuzzes pairs of paths and checks symmetry,
-idempotence, and `contains` agreement on sample points.
+**M4a landed** (see `design_docs/boolean_ops.md`). The approach is phased:
+
+- **M4a (done):** a polygonal MVP. Both operands are flattened to polygons and
+  combined by a clean-room **Martinez–Rueda–Feito** sweep (`lib/src/martinez.dart`)
+  for all five `PathOperation`s. The result is polygonal (curves are flattened —
+  a documented divergence from `dart:ui`, which preserves curves) and emitted as
+  `evenOdd` (matching the fill type `dart:ui` returns). Behind a sampling parity
+  gate: hand-picked cases plus a deterministic fuzz corpus against `dart:ui`.
+- **M4b (deferred):** curve-preserving output by porting Skia's `SkOpBuilder` /
+  `SkPathOpsCommon` intersection engine, behind the same gate. Boolean ops over
+  cubics are notoriously fiddly; this is the highest-risk parity surface.
+
+Performance: M4a is **~13–19× slower than `dart:ui`'s native pathops** (§7, §10).
+Acceptable for a correctness-first MVP (beating Skia here is a §3 non-goal), but
+flagged for a dedicated optimization pass — the combine benchmarks and the
+parity gate are the tooling that makes that pass safe.
 
 ### 6.5 `transform(Float64List matrix4)`
 
@@ -480,10 +491,33 @@ the next.
    each contour to a cumulative arc-length table. `addPath` /
    `extendWithPath` were rewritten onto the shared transform machinery
    (bulk buffer copy), and now support perspective.
-5. **M4 — Boolean ops.** `Path.combine(op, a, b)` for all four ops. This is
-   the riskiest surface; we ship behind a parity-test gate.
+5. **M4 — Boolean ops.** `Path.combine(op, a, b)` for all five operations,
+   behind a parity-test gate.
+   - **M4a — ✅ Done.** Polygonal MVP via a clean-room Martinez–Rueda sweep
+     (`lib/src/martinez.dart`); `PathOperation` enum + `Path.combine`; flatten →
+     sweep → `evenOdd` `PathBuilder`. Documented divergences: polygonal output
+     (curves flattened) and even-odd interiors. Verified by unit tests + a
+     `dart:ui` parity corpus (see `design_docs/boolean_ops.md`).
+   - **M4b — deferred.** Curve-preserving output (Skia `SkOpBuilder` port),
+     behind the same gate. Scoped separately when a workload needs it.
 6. **M5 — Polish.** Convexity heuristics, dartdoc pass, `0.x` → `1.0.0`
    stabilization, performance tuning informed by published benchmarks.
+
+### Tracked optimization: `Path.combine` performance
+
+`Path.combine` (M4a) is correct but **~13–19× slower than `dart:ui`** (§6.4).
+Correctness was P0 and is locked in by the parity gate + benchmarks; this is the
+deferred follow-up to close the gap, *not* premature optimization — the tooling
+(combine benchmarks both sides, the parity corpus) is already in place so the
+work can proceed safely. Known levers, cheapest first:
+
+- **Balanced-BST sweep line.** The MVP uses a sorted `List` (O(n) insert/remove
+  → O(n²) overall); a splay/AVL tree restores O(n log n).
+- **Allocation reduction.** The sweep allocates a `Float64List` per segment
+  intersection and an event object per endpoint; pool/inline these.
+- **Skip redundant flattening.** `combine` re-flattens both operands every call;
+  cache or accept pre-flattened input for batch callers.
+- **M4b** would also change the cost profile (no full re-flatten of curves).
 
 ## 11. Open questions
 
