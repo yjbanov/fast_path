@@ -1201,15 +1201,16 @@ final List<_Case> _cases = <_Case>[
   ),
 
   _Case(
-    // Verified empirically against the 2026-06 dart:ui (Impeller): degenerate
-    // conic weights normalize as w <= 0 -> quadratic (apex y=50), and
-    // w == +infinity -> the infinite-weight corner, i.e. two lines through the
-    // control point, filling up to y=100. fast_path matches both.
+    // Only the *channel-stable* degenerate weights are parity-checked here:
+    // w <= 0 normalizes to a quadratic (apex y=50) on every dart:ui version.
     //
-    // NaN is intentionally NOT exercised here: dart:ui treats a NaN weight like
-    // +infinity (a corner), but fast_path keeps it a safe quadratic — a
-    // documented divergence pinned by a unit test in test/conic_test.dart.
-    'conic with degenerate weights (0, negative, +infinity) match dart:ui',
+    // +infinity and NaN are intentionally NOT exercised against dart:ui — their
+    // engine behavior is channel-dependent (stable still treats both as a quad;
+    // master treats them as the infinite-weight corner). fast_path targets the
+    // master behavior (+infinity -> corner, NaN -> quad), which would make this
+    // parity case fail on stable CI. Those choices are instead pinned by a
+    // channel-independent unit test in test/conic_test.dart.
+    'conic with non-positive weights (0, negative) act as quads',
     (t) {
       t
         ..moveTo(0, 0)
@@ -1217,21 +1218,14 @@ final List<_Case> _cases = <_Case>[
         ..close()
         ..moveTo(120, 0)
         ..conicTo(170, 100, 220, 0, -3.0) // -> quad, apex y=50
-        ..close()
-        ..moveTo(360, 0)
-        ..conicTo(410, 100, 460, 0, double.infinity) // -> corner up to y=100
         ..close();
     },
     const [
-      // Quad lobes: inside below the apex (y<50), outside above it.
+      // Inside below the apex (y<50), outside above it.
       fp.Offset(50, 40),
       fp.Offset(50, 60),
       fp.Offset(170, 40),
       fp.Offset(170, 60),
-      // Corner lobe fills up to the control point (y~100): y=70 — which a quad
-      // would exclude — is inside, pinning the corner (not quad) behavior.
-      fp.Offset(410, 40),
-      fp.Offset(410, 70),
       ..._gridFar,
     ],
   ),

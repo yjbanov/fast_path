@@ -230,28 +230,32 @@ final class PathBuilder {
   /// point with control point `(x1, y1)` ending at `(x2, y2)`, weighted
   /// by [w].
   ///
-  /// Degenerate weights are normalized to match current
-  /// `dart:ui.Path.conicTo` (Impeller-backed; verified empirically against the
-  /// 2026-06 engine):
+  /// Degenerate weights are normalized to match `dart:ui.Path.conicTo`
+  /// (Impeller-backed; verified empirically against the 2026-06 **master**
+  /// engine):
   ///
   ///  - `w <= 0` (including `-infinity`) and `w == 1` become a plain quadratic
   ///    Bézier through the same control point — `w == 1` because a unit-weight
   ///    conic *is* a quadratic, and `w <= 0` because that is what the engine
   ///    does (note this differs from classic Skia docs, which convert `w <= 0`
-  ///    to a straight line).
+  ///    to a straight line). This holds on every `dart:ui` channel.
   ///  - `w == +infinity` collapses to the infinite-weight limit: two straight
-  ///    segments through the control point (`current → (x1, y1) → (x2, y2)`),
-  ///    matching the engine.
-  ///  - **`w` is NaN**: treated as a plain quadratic. This is the one
-  ///    documented divergence from `dart:ui`, which treats a NaN weight like
-  ///    `+infinity` (a corner) — an artifact of NaN comparisons rather than a
-  ///    designed behavior. fast_path keeps NaN as a safe quadratic.
+  ///    segments through the control point (`current → (x1, y1) → (x2, y2)`).
+  ///  - **`w` is NaN**: treated as a plain quadratic.
+  ///
+  /// Channel caveat: the `+infinity` and NaN handling tracks the `master`
+  /// channel. As of 2026-06 the `stable` channel still treats *both* as a plain
+  /// quadratic, so on stable `dart:ui` the `+infinity` result differs (corner
+  /// vs quad). fast_path targets `master`; this resolves when the change reaches
+  /// stable. (For NaN, fast_path's quadratic happens to match stable and
+  /// diverge from master — `dart:ui` treats a NaN weight like `+infinity`, an
+  /// artifact of NaN comparisons rather than designed behavior.)
   ///
   /// Implicit-moveTo rules from [lineTo] apply.
   ///
-  /// Behaves identically to `Path.conicTo` in `dart:ui` (modulo the NaN
-  /// divergence above), except that this method lives on [PathBuilder] rather
-  /// than `Path`.
+  /// Behaves identically to `Path.conicTo` in `dart:ui` (modulo the channel
+  /// caveat above), except that this method lives on [PathBuilder] rather than
+  /// `Path`.
   void conicTo(double x1, double y1, double x2, double y2, double w) {
     if (w == double.infinity) {
       // Infinite weight: the conic degenerates to the corner through the
