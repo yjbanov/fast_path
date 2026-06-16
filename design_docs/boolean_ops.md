@@ -211,10 +211,15 @@ result never exceeds the inputs' combined bounds).
   `packages/fast_path_bench_flutter/lib/src/ui_benchmarks.dart`.
 
 Expectation-setting: DESIGN.md §3 explicitly does *not* target beating Skia on
-boolean ops over cubics. The benchmark exists so regressions are visible and so
-we know our standing; M4a being polygonal, it may well *win* on simple cases
-(no curve-intersection engine to run) and we document that it's not
-curve-preserving.
+boolean ops. The benchmark exists so regressions are visible and so we know our
+standing. **Measured** (flutter-desktop, 2026-06, overlapping rounded-rect +
+oval): fast_path is **~13–19× slower** than dart:ui's native Skia/Impeller
+pathops — `union` 112µs vs 6µs (18.7×), `intersect` 78µs vs 6µs (13.5×),
+`difference` 88µs vs 6µs (14.8×), `xor` 125µs vs 6µs (19.3×). The earlier guess
+that a polygonal MVP might *win* on simple shapes was wrong: native pathops is
+fast enough that our per-call flattening + allocation-heavy Dart sweep
+dominates. This gap is the expected standing (§3) and the budget for later work
+— M4b, a balanced-BST sweep line, and allocation reduction.
 
 ## 7. Work plan (M4a)
 

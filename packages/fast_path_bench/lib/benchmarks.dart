@@ -28,6 +28,7 @@ import 'src/build_quads.dart';
 import 'src/builder_clone.dart';
 import 'src/builder_from_path.dart';
 import 'src/builder_snapshot.dart';
+import 'src/combine.dart';
 import 'src/contains_conics.dart';
 import 'src/contains_cubics.dart';
 import 'src/contains_grid.dart';
@@ -58,6 +59,7 @@ export 'src/build_quads.dart';
 export 'src/builder_clone.dart';
 export 'src/builder_from_path.dart';
 export 'src/builder_snapshot.dart';
+export 'src/combine.dart';
 export 'src/contains_conics.dart';
 export 'src/contains_cubics.dart';
 export 'src/contains_grid.dart';
@@ -107,6 +109,11 @@ List<FastPathBenchmark> allBenchmarks() => <FastPathBenchmark>[
       TransformPath1kBenchmark(),
       Metrics64Benchmark(),
       ExtractPath32Benchmark(),
+      // Boolean ops.
+      CombineUnionBenchmark(),
+      CombineIntersectBenchmark(),
+      CombineDifferenceBenchmark(),
+      CombineXorBenchmark(),
       // Conversions (fp-only).
       BuilderFromPath1kBenchmark(),
       BuilderSnapshot1kBenchmark(),

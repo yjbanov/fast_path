@@ -245,6 +245,32 @@ List<PairedBenchmark> allPairs() => const <PairedBenchmark>[
         createUi: ExtractPathUi32Benchmark.new,
       ),
       PairedBenchmark(
+        displayName: 'Combine — union',
+        description:
+            '20 union calls on an overlapping rounded-rect + oval. fast_path '
+            'flattens to polygons; dart:ui preserves curves.',
+        createFp: fp.CombineUnionBenchmark.new,
+        createUi: CombineUnionUiBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Combine — intersect',
+        description: '20 intersection calls on the same overlapping pair.',
+        createFp: fp.CombineIntersectBenchmark.new,
+        createUi: CombineIntersectUiBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Combine — difference',
+        description: '20 difference calls on the same overlapping pair.',
+        createFp: fp.CombineDifferenceBenchmark.new,
+        createUi: CombineDifferenceUiBenchmark.new,
+      ),
+      PairedBenchmark(
+        displayName: 'Combine — xor',
+        description: '20 exclusive-or calls on the same overlapping pair.',
+        createFp: fp.CombineXorBenchmark.new,
+        createUi: CombineXorUiBenchmark.new,
+      ),
+      PairedBenchmark(
         displayName: 'getBounds — cached',
         description:
             '1000 calls on a path whose bounds cache is primed. Should '

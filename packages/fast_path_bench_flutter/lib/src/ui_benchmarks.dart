@@ -844,3 +844,59 @@ class ExtractPathUi32Benchmark extends FastPathBenchmark {
     sink ^= acc;
   }
 }
+
+ui.Path _organicAUi() => ui.Path()
+  ..addRRect(ui.RRect.fromRectAndRadius(
+      const ui.Rect.fromLTRB(0, 0, 100, 100), const ui.Radius.circular(25)));
+
+ui.Path _organicBUi() =>
+    ui.Path()..addOval(const ui.Rect.fromLTRB(50, 30, 160, 120));
+
+/// Mirrors the `combine_*` benchmarks: 20 `ui.Path.combine` calls per run on the
+/// same overlapping rounded-rect + oval pair. `dart:ui` preserves curves
+/// through the operation, so unlike fast_path's polygonal result this keeps the
+/// engine's full boolean-op machinery in the loop.
+abstract class _CombineUiBenchmark extends FastPathBenchmark {
+  _CombineUiBenchmark(super.name, this._op);
+
+  final ui.PathOperation _op;
+  late ui.Path _a;
+  late ui.Path _b;
+
+  @override
+  void setup() {
+    _a = _organicAUi();
+    _b = _organicBUi();
+  }
+
+  @override
+  void run() {
+    var acc = 0;
+    for (var i = 0; i < 20; i++) {
+      acc ^= ui.Path.combine(_op, _a, _b).getBounds().left.toInt();
+    }
+    sink ^= acc;
+  }
+
+  @override
+  int get opsPerRun => 20;
+}
+
+class CombineUnionUiBenchmark extends _CombineUiBenchmark {
+  CombineUnionUiBenchmark()
+      : super('combine_union_ui', ui.PathOperation.union);
+}
+
+class CombineIntersectUiBenchmark extends _CombineUiBenchmark {
+  CombineIntersectUiBenchmark()
+      : super('combine_intersect_ui', ui.PathOperation.intersect);
+}
+
+class CombineDifferenceUiBenchmark extends _CombineUiBenchmark {
+  CombineDifferenceUiBenchmark()
+      : super('combine_difference_ui', ui.PathOperation.difference);
+}
+
+class CombineXorUiBenchmark extends _CombineUiBenchmark {
+  CombineXorUiBenchmark() : super('combine_xor_ui', ui.PathOperation.xor);
+}
