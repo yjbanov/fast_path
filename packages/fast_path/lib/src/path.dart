@@ -7,7 +7,9 @@ import 'dart:typed_data';
 
 import 'package:fast_geometry/fast_geometry.dart';
 import 'package:meta/meta.dart';
+import 'martinez.dart';
 import 'path_fill_type.dart';
+import 'path_operation.dart';
 import 'verbs.dart';
 
 /// Mutable, write-optimized builder for [Path].
@@ -1300,6 +1302,72 @@ final class Path {
       }
     }
     return Path._(_verbs, newPoints, _conicWeights, fillType);
+  }
+
+  /// Combines [a] and [b] with the set operation [op], returning a new path.
+  ///
+  /// Behaves like `Path.combine` in `dart:ui` — the result region is the union,
+  /// intersection, difference, exclusive-or, or reverse difference of the two
+  /// operands, each interpreted as a filled region — with two documented
+  /// divergences:
+  ///
+  ///  - **Polygonal output.** `dart:ui` preserves curves through the operation;
+  ///    fast_path flattens each operand to polygons first (at the same tolerance
+  ///    as [computeMetrics]) and returns a polygonal result. Containment and
+  ///    bounds match `dart:ui` to within the flattening tolerance, but the
+  ///    result has no curve verbs. (A curve-preserving implementation is
+  ///    planned — see design_docs/boolean_ops.md.)
+  ///  - **Even-odd interiors.** Each operand is interpreted under the even-odd
+  ///    rule and the result is emitted as [PathFillType.evenOdd] (matching the
+  ///    fill type `dart:ui` returns). A `nonZero` operand whose own contours
+  ///    overlap themselves can therefore differ; simple shapes are unaffected.
+  ///
+  /// A pure, static function: both operands are unchanged.
+  static Path combine(PathOperation op, Path a, Path b) {
+    final BoolOp boolOp;
+    final Path subject;
+    final Path clipping;
+    switch (op) {
+      case PathOperation.union:
+        boolOp = BoolOp.union;
+        subject = a;
+        clipping = b;
+      case PathOperation.intersect:
+        boolOp = BoolOp.intersection;
+        subject = a;
+        clipping = b;
+      case PathOperation.xor:
+        boolOp = BoolOp.xor;
+        subject = a;
+        clipping = b;
+      case PathOperation.difference:
+        boolOp = BoolOp.difference;
+        subject = a;
+        clipping = b;
+      case PathOperation.reverseDifference:
+        // reverseDifference(a, b) == difference(b, a).
+        boolOp = BoolOp.difference;
+        subject = b;
+        clipping = a;
+    }
+
+    final rings = martinezBooleanOp(
+      subject._flattenForOps(),
+      clipping._flattenForOps(),
+      boolOp,
+    );
+
+    final builder = PathBuilder()..fillType = PathFillType.evenOdd;
+    for (final ring in rings) {
+      final n = ring.length ~/ 2;
+      if (n < 3) continue;
+      builder.moveTo(ring[0], ring[1]);
+      for (var i = 1; i < n; i++) {
+        builder.lineTo(ring[i * 2], ring[i * 2 + 1]);
+      }
+      builder.close();
+    }
+    return builder.build();
   }
 
   /// Returns the signed winding contribution of the directed edge
