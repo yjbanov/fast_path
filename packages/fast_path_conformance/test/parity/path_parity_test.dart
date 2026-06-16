@@ -1883,6 +1883,93 @@ final List<_MetricsCase> _metricsCases = <_MetricsCase>[
     ..addOval(50, 50, 110, 90)),
 ];
 
+// ---------------------------------------------------------------------------
+// Path.combine (M4 boolean ops) parity.
+//
+// fast_path's combine is polygonal and even-odd (see Path.combine's dartdoc);
+// dart:ui preserves curves. Per design_docs/boolean_ops.md §5.2 the gate is
+// containment sampling: we compare the two results over a grid, skipping points
+// the dart:ui result classifies ambiguously (within an epsilon band of its
+// boundary, where polygon-vs-curve approximation and tie-breaks make
+// disagreement inherent).
+
+const List<(fp.PathOperation, ui.PathOperation)> _combineOps = [
+  (fp.PathOperation.union, ui.PathOperation.union),
+  (fp.PathOperation.intersect, ui.PathOperation.intersect),
+  (fp.PathOperation.difference, ui.PathOperation.difference),
+  (fp.PathOperation.reverseDifference, ui.PathOperation.reverseDifference),
+  (fp.PathOperation.xor, ui.PathOperation.xor),
+];
+
+/// Asserts the fast_path and dart:ui combine results agree on containment over
+/// [grid], skipping points where the dart:ui result is unstable under a [band]
+/// perturbation (i.e. near its boundary). Fails if no stable point was
+/// comparable (guards against a vacuous pass).
+void _assertCombineParity(
+  fp.Path fpResult,
+  ui.Path uiResult,
+  List<fp.Offset> grid, {
+  double band = 0.75,
+  required String reason,
+}) {
+  var compared = 0;
+  for (final p in grid) {
+    final inside = uiResult.contains(ui.Offset(p.dx, p.dy));
+    // Stability over the 8 neighbors at distance [band]. The diagonals matter:
+    // a point exactly on an axis-aligned edge or vertex of the result (where
+    // `contains` tie-breaks differ between the libraries) stays on that edge
+    // under axis-aligned perturbation, but the diagonals straddle it.
+    var stable = true;
+    for (final d in const [
+      (1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), //
+      (1.0, 1.0), (-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0),
+    ]) {
+      if (uiResult.contains(ui.Offset(p.dx + d.$1 * band, p.dy + d.$2 * band)) !=
+          inside) {
+        stable = false;
+        break;
+      }
+    }
+    if (!stable) continue;
+    expect(fpResult.contains(p), inside,
+        reason: 'combine containment disagreement at $p ($reason)');
+    compared++;
+  }
+  expect(compared, greaterThan(0), reason: 'no stable sample points ($reason)');
+}
+
+List<fp.Offset> _gridOver(double lo, double hi, double step) => [
+      for (var x = lo; x <= hi; x += step)
+        for (var y = lo; y <= hi; y += step) fp.Offset(x, y),
+    ];
+
+/// A deterministic random *convex* polygon program (vertices sorted by angle,
+/// so it is simple — no self-intersection). Built under the even-odd fill rule
+/// so the operand's interior is the one fast_path's combine assumes, keeping
+/// the corpus inside M4a's supported domain. Centered within [20, 80] with a
+/// radius up to 35, so two independently-generated operands overlap often.
+PathProgram _randomConvexPolygon(math.Random rng) {
+  final cx = 20 + rng.nextDouble() * 60;
+  final cy = 20 + rng.nextDouble() * 60;
+  final rx = 15 + rng.nextDouble() * 35;
+  final ry = 15 + rng.nextDouble() * 35;
+  final n = 3 + rng.nextInt(5); // 3..7 vertices
+  final angles = <double>[
+    for (var i = 0; i < n; i++) rng.nextDouble() * 2 * math.pi,
+  ]..sort();
+  final pts = <(double, double)>[
+    for (final a in angles) (cx + rx * math.cos(a), cy + ry * math.sin(a)),
+  ];
+  return (PathTarget t) {
+    t.evenOdd = true;
+    t.moveTo(pts[0].$1, pts[0].$2);
+    for (var i = 1; i < pts.length; i++) {
+      t.lineTo(pts[i].$1, pts[i].$2);
+    }
+    t.close();
+  };
+}
+
 void main() {
   group('computeMetrics parity vs dart:ui.Path', () {
     for (final c in _metricsCases) {
@@ -2012,5 +2099,66 @@ void main() {
       final uiPath = ui.Path()..fillType = ui.PathFillType.evenOdd;
       expect(uiPath.fillType, ui.PathFillType.evenOdd);
     });
+  });
+
+  group('Path.combine parity vs dart:ui.Path — hand-picked', () {
+    final grid = _gridOver(-20, 140, 8);
+    final cases = <(String, PathProgram, PathProgram)>[
+      ('overlapping rects', (t) => t.addRect(0, 0, 40, 40),
+          (t) => t.addRect(20, 20, 60, 60)),
+      ('nested rects', (t) => t.addRect(0, 0, 60, 60),
+          (t) => t.addRect(20, 20, 40, 40)),
+      ('disjoint rects', (t) => t.addRect(0, 0, 20, 20),
+          (t) => t.addRect(40, 40, 60, 60)),
+      ('coincident-edge rects', (t) => t.addRect(0, 0, 30, 30),
+          (t) => t.addRect(30, 0, 60, 30)),
+      ('overlapping ovals', (t) => t.addOval(0, 0, 80, 80),
+          (t) => t.addOval(40, 0, 120, 80)),
+      ('rect minus oval', (t) => t.addRect(0, 0, 80, 80),
+          (t) => t.addOval(20, 20, 100, 100)),
+      ('rrect over rect', (t) => t.addRRectUniform(0, 0, 60, 60, 15),
+          (t) => t.addRect(30, 30, 90, 90)),
+    ];
+
+    for (final (name, pa, pb) in cases) {
+      for (final (fpOp, uiOp) in _combineOps) {
+        test('$name — ${fpOp.name}', () {
+          final fpResult =
+              fp.Path.combine(fpOp, _buildFp(pa), _buildFp(pb));
+          final uiResult =
+              ui.Path.combine(uiOp, _buildUi(pa), _buildUi(pb));
+          _assertCombineParity(fpResult, uiResult, grid,
+              reason: '$name ${fpOp.name}');
+        });
+      }
+    }
+  });
+
+  group('Path.combine parity vs dart:ui.Path — generated corpus', () {
+    // Deterministic fuzz: each seed makes two overlapping convex polygons and
+    // checks all five operations against dart:ui. Convex + even-odd keeps every
+    // operand inside M4a's supported domain; the overlaps exercise the
+    // intersection engine, shared vertices, and the connect-edges walk.
+    const seedCount = 40;
+    final grid = _gridOver(-6, 108, 6);
+    for (var seed = 0; seed < seedCount; seed++) {
+      test('seed $seed', () {
+        final rng = math.Random(seed);
+        final pa = _randomConvexPolygon(rng);
+        final pb = _randomConvexPolygon(rng);
+        final fpA = _buildFp(pa);
+        final fpB = _buildFp(pb);
+        final uiA = _buildUi(pa);
+        final uiB = _buildUi(pb);
+        for (final (fpOp, uiOp) in _combineOps) {
+          _assertCombineParity(
+            fp.Path.combine(fpOp, fpA, fpB),
+            ui.Path.combine(uiOp, uiA, uiB),
+            grid,
+            reason: 'seed $seed ${fpOp.name}',
+          );
+        }
+      });
+    }
   });
 }
