@@ -1201,35 +1201,37 @@ final List<_Case> _cases = <_Case>[
   ),
 
   _Case(
-    // Verified empirically: current dart:ui (Impeller) normalizes
-    // invalid conic weights to w == 1 (a plain quadratic), NOT to a
-    // line as classic Skia documentation suggests.
-    'conic with invalid weights (0, negative, NaN, infinity) acts as quad',
+    // Verified empirically against the 2026-06 dart:ui (Impeller): degenerate
+    // conic weights normalize as w <= 0 -> quadratic (apex y=50), and
+    // w == +infinity -> the infinite-weight corner, i.e. two lines through the
+    // control point, filling up to y=100. fast_path matches both.
+    //
+    // NaN is intentionally NOT exercised here: dart:ui treats a NaN weight like
+    // +infinity (a corner), but fast_path keeps it a safe quadratic — a
+    // documented divergence pinned by a unit test in test/conic_test.dart.
+    'conic with degenerate weights (0, negative, +infinity) match dart:ui',
     (t) {
       t
         ..moveTo(0, 0)
-        ..conicTo(50, 100, 100, 0, 0.0)
+        ..conicTo(50, 100, 100, 0, 0.0) // -> quad, apex y=50
         ..close()
         ..moveTo(120, 0)
-        ..conicTo(170, 100, 220, 0, -3.0)
-        ..close()
-        ..moveTo(240, 0)
-        ..conicTo(290, 100, 340, 0, double.nan)
+        ..conicTo(170, 100, 220, 0, -3.0) // -> quad, apex y=50
         ..close()
         ..moveTo(360, 0)
-        ..conicTo(410, 100, 460, 0, double.infinity)
+        ..conicTo(410, 100, 460, 0, double.infinity) // -> corner up to y=100
         ..close();
     },
     const [
-      // Quad apex is y = 50 for each lobe; probe just inside and out.
-      fp.Offset(50, 45),
-      fp.Offset(50, 55),
-      fp.Offset(170, 45),
-      fp.Offset(170, 55),
-      fp.Offset(290, 45),
-      fp.Offset(290, 55),
-      fp.Offset(410, 45),
-      fp.Offset(410, 55),
+      // Quad lobes: inside below the apex (y<50), outside above it.
+      fp.Offset(50, 40),
+      fp.Offset(50, 60),
+      fp.Offset(170, 40),
+      fp.Offset(170, 60),
+      // Corner lobe fills up to the control point (y~100): y=70 — which a quad
+      // would exclude — is inside, pinning the corner (not quad) behavior.
+      fp.Offset(410, 40),
+      fp.Offset(410, 70),
       ..._gridFar,
     ],
   ),

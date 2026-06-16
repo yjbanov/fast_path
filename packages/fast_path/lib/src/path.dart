@@ -228,23 +228,39 @@ final class PathBuilder {
   /// point with control point `(x1, y1)` ending at `(x2, y2)`, weighted
   /// by [w].
   ///
-  /// Invalid weights — `w <= 0`, NaN, or infinite — are normalized to
-  /// `w == 1`, i.e. the segment becomes a plain quadratic Bézier through
-  /// the same control point. This matches the behavior observed in
-  /// current `dart:ui.Path.conicTo` (Impeller-backed; verified
-  /// empirically — note this differs from classic Skia documentation,
-  /// which converts `w <= 0` to a straight line). A weight of exactly 1
-  /// is also stored as a quadratic, since the two are geometrically
-  /// identical.
+  /// Degenerate weights are normalized to match current
+  /// `dart:ui.Path.conicTo` (Impeller-backed; verified empirically against the
+  /// 2026-06 engine):
+  ///
+  ///  - `w <= 0` (including `-infinity`) and `w == 1` become a plain quadratic
+  ///    Bézier through the same control point — `w == 1` because a unit-weight
+  ///    conic *is* a quadratic, and `w <= 0` because that is what the engine
+  ///    does (note this differs from classic Skia docs, which convert `w <= 0`
+  ///    to a straight line).
+  ///  - `w == +infinity` collapses to the infinite-weight limit: two straight
+  ///    segments through the control point (`current → (x1, y1) → (x2, y2)`),
+  ///    matching the engine.
+  ///  - **`w` is NaN**: treated as a plain quadratic. This is the one
+  ///    documented divergence from `dart:ui`, which treats a NaN weight like
+  ///    `+infinity` (a corner) — an artifact of NaN comparisons rather than a
+  ///    designed behavior. fast_path keeps NaN as a safe quadratic.
   ///
   /// Implicit-moveTo rules from [lineTo] apply.
   ///
-  /// Behaves identically to `Path.conicTo` in `dart:ui`, except that this
-  /// method lives on [PathBuilder] rather than `Path`.
+  /// Behaves identically to `Path.conicTo` in `dart:ui` (modulo the NaN
+  /// divergence above), except that this method lives on [PathBuilder] rather
+  /// than `Path`.
   void conicTo(double x1, double y1, double x2, double y2, double w) {
-    if (!w.isFinite || w <= 0 || w == 1.0) {
-      // NaN, ±infinity, non-positive, and exactly-1 weights all behave
-      // as a plain quadratic in current dart:ui.
+    if (w == double.infinity) {
+      // Infinite weight: the conic degenerates to the corner through the
+      // control point — two line segments — matching current dart:ui.
+      lineTo(x1, y1);
+      lineTo(x2, y2);
+      return;
+    }
+    if (w.isNaN || w <= 0 || w == 1.0) {
+      // NaN (our safe choice), non-positive, and exactly-1 weights all behave
+      // as a plain quadratic.
       quadraticBezierTo(x1, y1, x2, y2);
       return;
     }

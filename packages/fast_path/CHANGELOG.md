@@ -4,6 +4,13 @@
 
 ### Changed
 
+- `PathBuilder.conicTo` re-pinned against the 2026-06 `dart:ui` (Impeller),
+  which split its degenerate-weight handling: `w <= 0` still becomes a plain
+  quadratic, but `w == +infinity` now collapses to the infinite-weight corner
+  (two line segments through the control point) rather than a quadratic. A
+  **NaN** weight is fast_path's one documented divergence — `dart:ui` treats it
+  like `+infinity`, but fast_path keeps it a safe quadratic. (The April engine
+  treated all of these as quadratics; the conformance suite caught the drift.)
 - **Breaking:** `Path.transform`, `PathBuilder.addPath`, and
   `PathBuilder.extendWithPath` now take a `fast_geometry` `Matrix` instead of a
   column-major `Float64List` (the `matrix4:` named parameter is now `matrix:`).

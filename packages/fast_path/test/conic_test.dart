@@ -57,22 +57,52 @@ void main() {
       expect(viaConic, equals(viaQuad));
     });
 
-    test('invalid weights (<= 0, NaN, infinity) behave as w == 1', () {
-      // Matches observed dart:ui (Impeller) behavior: invalid conic
-      // weights are normalized to a plain quadratic through the same
-      // control point. (Classic Skia documentation says w <= 0 becomes
-      // a line — current Flutter does not do that.)
+    test('degenerate weights: w<=0 and NaN are quads, +infinity is a corner',
+        () {
+      // Matches the 2026-06 dart:ui (Impeller): w <= 0 normalizes to a plain
+      // quadratic through the control point (classic Skia docs say w <= 0
+      // becomes a line — current Flutter does not). w == +infinity collapses to
+      // the infinite-weight corner: two line segments through the control
+      // point. NaN is fast_path's documented divergence — dart:ui treats a NaN
+      // weight like +infinity (a corner), but we keep it a safe quadratic.
       final viaQuad = (PathBuilder()
             ..moveTo(0, 0)
             ..quadraticBezierTo(50, 100, 100, 0))
           .build();
-      for (final w in [0.0, -2.0, double.nan, double.infinity]) {
+      for (final w in [0.0, -2.0, double.nan]) {
         final viaConic = (PathBuilder()
               ..moveTo(0, 0)
               ..conicTo(50, 100, 100, 0, w))
             .build();
-        expect(viaConic, equals(viaQuad), reason: 'w=$w');
+        expect(viaConic, equals(viaQuad), reason: 'w=$w should be a quad');
       }
+
+      // +infinity becomes the two-segment corner through the control point.
+      final viaCorner = (PathBuilder()
+            ..moveTo(0, 0)
+            ..lineTo(50, 100)
+            ..lineTo(100, 0))
+          .build();
+      final viaInfinity = (PathBuilder()
+            ..moveTo(0, 0)
+            ..conicTo(50, 100, 100, 0, double.infinity))
+          .build();
+      expect(viaInfinity, equals(viaCorner));
+
+      // The corner fills up to the control point (y=100), so a point above the
+      // quad apex (y=50) is inside the corner but outside the equivalent quad.
+      final cornerClosed = (PathBuilder()
+            ..moveTo(0, 0)
+            ..conicTo(50, 100, 100, 0, double.infinity)
+            ..close())
+          .build();
+      final quadClosed = (PathBuilder()
+            ..moveTo(0, 0)
+            ..quadraticBezierTo(50, 100, 100, 0)
+            ..close())
+          .build();
+      expect(cornerClosed.contains(const Offset(50, 70)), isTrue);
+      expect(quadClosed.contains(const Offset(50, 70)), isFalse);
     });
 
     test('relativeConicTo accumulates from current point', () {
