@@ -15,6 +15,8 @@ dependencies:
 dev_dependencies:
   lints: ^4.0.0
   test: ^1.25.0
-  bench_core: any
-  benchmark_harness: ^2.2.2
+  # vector_math is the Matrix4 oracle for the parity tests (it is published, so
+  # it is a clean dev dependency). Benchmark-only deps (bench_core,
+  # benchmark_harness) live in the fast_geometry_bench package so this published
+  # package carries no dependency on the unpublished bench_core.
   vector_math: ^2.1.4

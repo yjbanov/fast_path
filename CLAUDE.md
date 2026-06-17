@@ -18,6 +18,7 @@ packages/
   fast_path_conformance/     Parity tests against dart:ui — Flutter only, not published
   fast_path_flutter/         Future Flutter bridge — not yet implemented
   bench_core/                Shared benchmark harness (subject/reference pairs, JSON)
+  fast_geometry_bench/       Pure-Dart Matrix benchmarks vs vector_math — not published
   fast_path_bench/           Pure-Dart path benchmarks (JIT + AOT-native runners)
   fast_path_bench_flutter/   Flutter-hosted path benchmarks (desktop AOT + manual web)
 skills/
@@ -84,8 +85,11 @@ bend it.
   cross-cutting — propose, don't land unilaterally.
 - **Unit + `vector_math` parity tests** (both run under a plain `dart test`,
   since `vector_math` is a pure-Dart dev dep) **plus a paired benchmark** in
-  `packages/fast_geometry/benchmark/src/matrix_catalog.dart` (subject vs
-  `Matrix4`, folded into the anti-DCE sink). See `skills/add-matrix-api/SKILL.md`.
+  `packages/fast_geometry_bench/lib/src/matrix_catalog.dart` (subject vs
+  `Matrix4`, folded into the anti-DCE sink). The benchmarks live in the separate
+  `fast_geometry_bench` package (not in `fast_geometry`) so the published
+  package carries no dependency on the unpublished `bench_core`. See
+  `skills/add-matrix-api/SKILL.md`.
 
 ### `bench_core`
 

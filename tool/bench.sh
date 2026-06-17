@@ -117,8 +117,8 @@ run_path() {
 run_geometry() {
   case "$mode" in
     jit)
-      ( cd packages/fast_geometry
-        exec dart run benchmark/matrix_benchmark.dart --mode=jit \
+      ( cd packages/fast_geometry_bench
+        exec dart run bin/run_all.dart --mode=jit \
           "${args[@]+"${args[@]}"}" )
       ;;
 
@@ -126,7 +126,7 @@ run_geometry() {
       mkdir -p build
       echo "==> compiling AOT native binary (geometry)" >&2
       dart compile exe \
-        packages/fast_geometry/benchmark/matrix_benchmark.dart \
+        packages/fast_geometry_bench/bin/run_all.dart \
         -o build/matrix_aot >&2
       echo >&2
       ./build/matrix_aot --mode=aot "${args[@]+"${args[@]}"}"

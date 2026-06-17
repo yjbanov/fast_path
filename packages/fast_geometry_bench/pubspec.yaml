@@ -1,0 +1,22 @@
+name: fast_geometry_bench
+description: >-
+  Benchmarks for the fast_geometry package. Pure Dart — the Matrix suite runs
+  under `dart run` and AOT, comparing against package:vector_math's Matrix4.
+  Kept out of the published fast_geometry package so that package carries no
+  dev dependency on the unpublished bench_core. Not published to pub.dev.
+publish_to: none
+
+resolution: workspace
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  fast_geometry: any
+  bench_core: any
+  benchmark_harness: ^2.2.2
+  vector_math: ^2.1.4
+
+dev_dependencies:
+  lints: ^4.0.0
+  test: ^1.25.0

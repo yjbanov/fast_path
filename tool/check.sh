@@ -54,6 +54,9 @@ run_phase "dart test (bench_core)" \
 run_phase "dart test (fast_geometry)" \
   bash -c "cd packages/fast_geometry && dart test --reporter=compact"
 
+run_phase "dart test (fast_geometry_bench)" \
+  bash -c "cd packages/fast_geometry_bench && dart test --reporter=compact"
+
 run_phase "dart test (fast_path)" \
   bash -c "cd packages/fast_path && dart test --reporter=compact"
 

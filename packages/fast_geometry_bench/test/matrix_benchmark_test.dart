@@ -9,7 +9,7 @@
 // also exercises the catalog wiring so a broken pair fails CI, not a manual
 // bench run.
 
-import '../benchmark/src/matrix_catalog.dart';
+import 'package:fast_geometry_bench/matrix_benchmarks.dart';
 import 'package:test/test.dart';
 
 void main() {

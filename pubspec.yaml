@@ -7,6 +7,7 @@ environment:
 workspace:
   - packages/bench_core
   - packages/fast_geometry
+  - packages/fast_geometry_bench
   - packages/fast_path
   - packages/fast_path_conformance
   - packages/fast_path_flutter

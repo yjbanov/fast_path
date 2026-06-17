@@ -191,7 +191,9 @@ A method is not done until its parity test is green.
 
 Every public `Matrix` operation ships a benchmark — same bar as tests. Add a
 `BenchmarkEntry` pair to
-`packages/fast_geometry/benchmark/src/matrix_catalog.dart`:
+`packages/fast_geometry_bench/lib/src/matrix_catalog.dart` (the benchmarks live
+in the separate `fast_geometry_bench` package, not in `fast_geometry`, so the
+published package carries no dependency on the unpublished `bench_core`):
 
 - **Subject** measures `Matrix`; **reference** measures the `Matrix4` equivalent.
   Both extend the file's `_LoopBench` (loops `_n` times via a monomorphic
