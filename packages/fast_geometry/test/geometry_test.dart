@@ -295,6 +295,26 @@ void main() {
     test('is never equal to a non-RRect', () {
       expect(_rrect() == Object(), isFalse);
     });
+
+    test('toString shows edges and per-corner radii', () {
+      expect(
+        _rrect().toString(),
+        'RRect.fromLTRB(1.0, 2.0, 3.0, 4.0, '
+        'Radius.elliptical(5.0, 6.0), Radius.elliptical(7.0, 8.0), '
+        'Radius.elliptical(9.0, 10.0), Radius.elliptical(11.0, 12.0))',
+      );
+      // Uniform circular corners render via the circular branch of Radius.
+      final uniform = RRect.fromRectAndRadius(
+        const Rect.fromLTRB(0.0, 0.0, 10.0, 10.0),
+        const Radius.circular(2.0),
+      );
+      expect(
+        uniform.toString(),
+        'RRect.fromLTRB(0.0, 0.0, 10.0, 10.0, '
+        'Radius.circular(2.0), Radius.circular(2.0), '
+        'Radius.circular(2.0), Radius.circular(2.0))',
+      );
+    });
   });
 
   group('Tangent', () {

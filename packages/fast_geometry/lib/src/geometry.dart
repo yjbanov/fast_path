@@ -334,6 +334,14 @@ final class RRect {
         blRadiusX,
         blRadiusY,
       ]);
+
+  @override
+  String toString() => 'RRect.fromLTRB('
+      '${left.toStringAsFixed(1)}, '
+      '${top.toStringAsFixed(1)}, '
+      '${right.toStringAsFixed(1)}, '
+      '${bottom.toStringAsFixed(1)}, '
+      '$tlRadius, $trRadius, $brRadius, $blRadius)';
 }
 
 /// The position and tangent direction at a point on a path contour, as

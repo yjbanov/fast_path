@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `RRect.toString()`: added, for parity with `dart:ui.RRect` and the other
+  geometry value types (it previously fell back to `Instance of 'RRect'`).
+  Renders the edges plus each corner radius (circular or elliptical).
 - `Matrix` (performance): widened the inline core from four doubles to six, so
   the full 2D-affine block (the 2x2 linear part plus 2D translation) is stored
   inline and the extension holds only the 3D/perspective tail. Rotation, skew,
