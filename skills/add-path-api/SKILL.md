@@ -140,8 +140,16 @@ Common ones:
 - `Path.contains` on a degenerate (zero-length, single-point) path:
   match dart:ui's behavior, which is typically "not contained".
 
-When in doubt, write a tiny Flutter test program, observe the actual
-behavior, and pin it down in a parity test before implementing.
+When in doubt, write a tiny Flutter program (or a one-off test in the
+`fast_path_conformance` package), observe the *actual* behavior, and pin it
+down before implementing — ideally as an oracle test that asserts what
+`dart:ui` does, so a future engine change trips a red test instead of silently
+diverging your implementation.
+
+Beware that `dart:ui`'s behavior is a **moving target**: it changes across
+Flutter versions and channels, so a behavior you verify on `master` may not yet
+be in `stable` (or vice versa). Record which engine you observed, and see §7 on
+keeping the parity test itself robust to that drift.
 
 ### 5. Implement on the verb/point buffer (no native bindings)
 
@@ -205,25 +213,51 @@ Two test files, both required for the PR:
   large inputs.
 - These run under `dart test` with no Flutter dependency.
 
-**Parity test** (`test/parity/path_<area>_parity_test.dart`):
+**Parity test** (in the **`fast_path_conformance` package**, under
+`packages/fast_path_conformance/test/parity/`):
 
-- Imports `dart:ui` (this directory is the only place in the repo that
-  may).
+- Parity tests live in a *separate, Flutter-only package* — the one place in
+  the repo that imports `dart:ui`. (The core `fast_path` package never does, so
+  a plain `dart test` there has no parity tests to skip.) Most cases extend the
+  existing `path_parity_test.dart` harness (`PathTarget`, `_buildFp`,
+  `_buildUi`), which replays one call sequence on both sides.
 - For each test case: replay the *same call sequence* on a
-  `fast_path.PathBuilder` and on a `ui.Path`. Then compare observable
-  outputs of the resulting `fast_path.Path` (after `build()`) against
-  the `ui.Path` (which conflates builder and path):
-  `getBounds`, `contains` over a sample grid, `computeMetrics().length`,
-  etc.
-- Tolerances are documented at the top of the file. `getBounds`
-  agreement to 1e-4 absolute / 1e-6 relative; `contains` exact except
-  in an epsilon-band around the curve; lengths to 1e-4.
-- Runs only under `flutter test` (the file should be guarded so a plain
-  `dart test` ignores it cleanly — typically by living under
-  `test/parity/` and being excluded by `dart_test.yaml`).
+  `fast_path.PathBuilder` and on a `ui.Path`, then compare observable outputs of
+  the resulting `fast_path.Path` (after `build()`) against the `ui.Path`:
+  `getBounds`, `contains` over a sample grid, `computeMetrics().length`, etc.
+- Tolerances are documented at the top of the file: `getBounds` to 1e-4 abs /
+  1e-6 rel; `contains` exact except in an epsilon band around the curve;
+  lengths to 1e-4.
+- Runs only under `flutter test`.
 
 A change is not done until the parity test for the affected behavior is
-green.
+green — **on CI's engine, not just yours** (see below).
+
+**Parity is a moving target — assert only channel-stable behavior.** CI runs
+Flutter `stable`; contributors may run `master`. When `dart:ui`'s behavior for
+a case differs across channels (it does — e.g. degenerate conic weights), a
+parity test that hardcodes one channel's answer passes locally and fails on the
+other. So:
+
+- A `dart:ui` parity test may assert only behavior that is the *same on every
+  channel we run*. Confirm the case on `stable` (CI), not just your local
+  engine.
+- Pin genuinely channel-sensitive behavior with a **channel-independent unit
+  test** in the core package instead — one that exercises fast_path *alone*
+  (assert the built path's structure, or `contains`), with no `dart:ui`
+  comparison. It passes on any channel. Document the channel you targeted and
+  the divergence in the method's dartdoc.
+
+**Region/area-producing ops** (`Path.combine`; future simplify / stroke). The
+output is a filled *region*, not a fixed verb structure, so parity is
+*containment sampling*, not output identity: compare `fp.contains == ui.contains`
+over a grid, **skipping points near either result's boundary** (where
+polygon-vs-curve approximation and on-edge tie-breaks make disagreement
+inherent). Detect "near a boundary" by perturbing the sample and checking
+`ui.contains` is stable — perturb in **8 directions including diagonals**,
+because a point exactly on an axis-aligned edge stays on it under axis-aligned
+perturbation and only the diagonals catch the tie. Guard against a vacuous pass
+(assert at least one stable point was actually compared).
 
 ### 8. Update the index
 
@@ -291,9 +325,10 @@ wrong, dig in before merging.
 - [ ] Dartdoc cross-references the dart:ui equivalent, calls out the
       receiver-class change, and lists edge cases.
 - [ ] Unit test covers documented edges.
-- [ ] Parity test under `test/parity/` replays the same call sequence
-      on `PathBuilder` + `Path` and on `ui.Path`, and is green under
-      `flutter test`.
+- [ ] Parity test in `packages/fast_path_conformance/test/parity/` replays the
+      same call sequence on `PathBuilder` + `Path` and on `ui.Path`, and is
+      green under `flutter test` — and asserts only channel-stable behavior
+      (channel-sensitive cases pinned by a core-package unit test instead).
 - [ ] `CHANGELOG.md` updated; `DESIGN.md` updated if architecture moved.
 - [ ] Benchmark added in `packages/fast_path_bench/lib/src/` and
       registered in `packages/fast_path_bench/lib/benchmarks.dart`.

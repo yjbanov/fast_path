@@ -24,6 +24,7 @@ skills/
   add-path-api/              Checklist for adding/changing PathBuilder or Path API
   add-matrix-api/            Checklist for adding/changing fast_geometry's Matrix API
   port-from-skia/            Checklist for porting algorithms from Skia/Flutter
+                             (and other permissive third-party references)
 design_docs/                 Cross-package design notes (matrix, bench, fast_geometry)
 ```
 
@@ -98,8 +99,8 @@ Read and follow the appropriate skill before starting:
 
 - Adding/changing `PathBuilder` or `Path` → `skills/add-path-api/SKILL.md`
 - Adding/changing `fast_geometry`'s `Matrix` → `skills/add-matrix-api/SKILL.md`
-- Porting an algorithm from Skia or the Flutter engine →
-  `skills/port-from-skia/SKILL.md`
+- Porting an algorithm from Skia, the Flutter engine, or any permissive
+  third-party reference → `skills/port-from-skia/SKILL.md`
 
 ## Escalate, don't decide alone
 

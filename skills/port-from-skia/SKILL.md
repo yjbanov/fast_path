@@ -1,6 +1,6 @@
 ---
 name: port-from-skia
-description: Use whenever code, algorithms, comments, or test cases are being copied or translated from Skia, the Flutter engine, or Impeller into fast_path. Trigger on phrases like "port this from Skia", "translate SkPath", "borrow from Flutter engine", "the upstream version does X", or whenever a contributor opens a file under skia/, flutter/engine, or Impeller and references it in a fast_path source file. Also trigger when reviewing a fast_path PR whose diff cites an upstream C++ file. Apply this even if the user does not explicitly say "port" — the moment Skia/Flutter source is being adapted, this skill governs the workflow.
+description: Use whenever code, algorithms, comments, or test cases are being copied or translated from Skia, the Flutter engine, or Impeller — OR from any other permissively-licensed third-party reference (an MIT/BSD/Apache library, or a reference implementation of a published algorithm) — into fast_path. Trigger on phrases like "port this from Skia", "translate SkPath", "borrow from Flutter engine", "the upstream version does X", "adapt this from <library>", "port the <algorithm> reference", or whenever a contributor opens a file under skia/, flutter/engine, or Impeller, or a third-party repo, and references it in a fast_path source file. Also trigger when reviewing a fast_path PR whose diff cites an upstream C++ file or a third-party implementation. Apply this even if the user does not explicitly say "port" — the moment external source is being adapted, this skill governs the workflow.
 ---
 
 # Porting code from Skia / Flutter into fast_path
@@ -37,9 +37,25 @@ Apply this skill when:
   Impeller path geometry).
 - Copying a test case or fixture from Skia's `tests/` or Flutter's
   `engine/.../path_unittests.cc`.
+- Adapting a **permissively-licensed third-party implementation that is not
+  Skia/Flutter** — an MIT/BSD/Apache library, or someone's reference
+  implementation of a published algorithm.
 
-It does **not** apply to clean-room Dart code that happens to implement the
-same algorithm from a textbook. That's fine and needs no upstream attribution.
+**Paper vs. implementation — the attribution line.** A *published algorithm* (a
+paper, a textbook) is not copyrightable: clean-room Dart written from the
+paper's description needs no upstream attribution. But a *specific
+implementation* you read and closely follow — its data structures, control
+flow, edge-case handling — *is* copyrightable. If your Dart tracks that
+implementation, preserve its copyright and license notice and cite it (commit
+or version + date), exactly as for a Skia port — even when you also cite the
+underlying paper. When unsure which side of the line you're on, attribute; it's
+cheap and safe.
+
+Example in this repo: `lib/src/martinez.dart` ports the Martínez–Rueda
+sweep-line boolean-op algorithm. Its header cites both the 2009 *paper* (the
+algorithm) and the MIT `w8r/martinez` *implementation* it was adapted from, with
+that project's copyright preserved — because the Dart follows the reference's
+structure, not just the paper's prose.
 
 ## Workflow
 
